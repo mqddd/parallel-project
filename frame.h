@@ -10,3 +10,6 @@ typedef struct Frame {
   UCHAR *b;
 } Frame;
 
+void save_frame(Frame *frame, char *file);
+
+void free_frame(Frame *frame);
