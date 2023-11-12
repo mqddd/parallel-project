@@ -1,18 +1,7 @@
 #include "qdbmp.h"
 #include <stdio.h>
 #include <stdlib.h>
-
-#ifndef UCHAR
-#define UCHAR unsigned char
-#endif /* ifndef UCHAR */
-
-typedef struct Frame {
-  int width;
-  int height;
-  UCHAR *r;
-  UCHAR *g;
-  UCHAR *b;
-} Frame;
+#include "frame.h"
 
 Frame *create_frame(int width, int height) {
   Frame *frame = malloc(sizeof(Frame));
