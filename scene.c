@@ -28,12 +28,12 @@ Scene *sample_scene1() {
 }
 
 
-int main() {
-  Scene * scene = sample_scene1();
-  printf("count %d\n", scene->count);
+// int main() {
+//   Scene * scene = sample_scene1();
+//   printf("count %d\n", scene->count);
 
-  for (int i = 0; i < scene->count; i++){
-    Object o = scene->objects[i];
-    printf("%f %f %f: %f - %d %d %d\n", o.x, o.y, o.z, o.radius, o.color.r, o.color.g, o.color.b);
-  }
-}
+//   for (int i = 0; i < scene->count; i++){
+//     Object o = scene->objects[i];
+//     printf("%f %f %f: %f - %d %d %d\n", o.x, o.y, o.z, o.radius, o.color.r, o.color.g, o.color.b);
+//   }
+// }

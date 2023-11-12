@@ -2,9 +2,13 @@
 #include "scene.h"
 
 typedef struct PipelineSetting {
+  int width;
+  int height;
   int debug;
   int save;
   char *out_file;
 } PipelineSetting;
 
-typedef Frame *(*Renderer)(Scene *, PipelineSetting);
+typedef void (*Renderer)(Scene *, Frame *, PipelineSetting);
+
+void pipeline(Scene *scene, PipelineSetting setting, Renderer renderer);

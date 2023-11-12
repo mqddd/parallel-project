@@ -17,3 +17,9 @@ typedef struct Scene {
   int count;
   Object *objects;
 } Scene;
+
+Scene *create_scene(Object *objects, int count);
+
+void free_scene(Scene *scene);
+
+Scene *sample_scene1();
