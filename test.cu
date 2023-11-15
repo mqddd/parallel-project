@@ -5,6 +5,62 @@ extern "C" {
 #include <stdio.h>
 // #include "vec3.h"
 
+typedef struct {
+  double x;
+  double y;
+  double z;
+} Vec3;
+
+__device__ void add_v(Vec3 vec, Vec3 target) {
+  vec.x += target.x;
+  vec.y += target.y;
+  vec.z += target.z;
+}
+__device__ void add_v(Vec3 vec, int v) {
+  vec.x += v;
+  vec.y += v;
+  vec.z += v;
+}
+__device__ void sub_v(Vec3 vec, Vec3 target) {
+  vec.x -= target.x;
+  vec.y -= target.y;
+  vec.z -= target.z;
+}
+__device__ void sub_v(Vec3 vec, int v) {
+  vec.x -= v;
+  vec.y -= v;
+  vec.z -= v;
+}
+__device__ void mult_v(Vec3 vec, Vec3 target) {
+  vec.x *= target.x;
+  vec.y *= target.y;
+  vec.z *= target.z;
+}
+__device__ void mult_v(Vec3 vec, int v) {
+  vec.x *= v;
+  vec.y *= v;
+  vec.z *= v;
+}
+__device__ void divide_v(Vec3 vec, int v) {
+  vec.x /= v;
+  vec.y /= v;
+  vec.z /= v;
+}
+__device__ double dot_v(Vec3 vec, Vec3 target) {
+  vec.x += target.x;
+  vec.y += target.y;
+  vec.z += target.z;
+  return vec.x * target.x + vec.y * target.y + vec.z * target.z;
+}
+__device__ void cross_v(Vec3 vec, Vec3 target) {
+  double x = vec.x;
+  double y = vec.y;
+  double z = vec.z;
+  vec.x = y * target.z - z * target.y;
+  vec.y = -x * target.z - z * target.x;
+  vec.z = x * target.y - y * target.x;
+}
+
 __global__ void test_kernel(Object *objects, int count, UCHAR *r, UCHAR *g,
                             UCHAR *b, int w, int h) {
   int x = blockDim.x * blockIdx.x + threadIdx.x;
