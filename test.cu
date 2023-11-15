@@ -74,41 +74,7 @@ __device__ void normalize_v(Vec3 *vec) {
   divide_v(vec, len_v(vec));
 }
 
-__device__ int ray_intersect_(Vec3 *o, Vec3 *d, Object *object) {
-  Vec3 center = {.x = object->x, .y = object->y, .z = object->z};
-  Vec3 l;
-  copy_v(&l, &center);
-  sub_v(&l, o);
-  double tc = dot_v(&l, d);
-  if (tc < 0)
-    return 0;
-  double lL2 = sq_len_v(&l);
-  double d2 = lL2 - (tc * tc);
-  double r2 = object->radius;
-  if (o->x > 2.98 && o->y > 1.98) {
-    printf("%f %f %f\n", d2, tc*tc, lL2);
-  }
-  r2 *= r2;
-  if (d2 > r2)
-    return 0;
-  return 1;
-}
-__device__ int ray_intersect__(Vec3 *o, Vec3 *d, Object *object) {
-  Vec3 center = {.x = object->x, .y = object->y, .z = object->z};
-  Vec3 l;
-  copy_v(&l, o);
-  sub_v(&l, &center);
-  // double a = dot_v(o, o);
-  double b = dot_v(&l, o);
-  double c = dot_v(&l, &l) - object->radius * object->radius;
-  if (c > 0.0f && b > 0.0f) return 0;
-  double discr = b * b - c;
-
-  if (discr < 0.0f) return 0;
-
-  return 1;
-}
-__device__ int ray_intersect(Vec3 *o, Vec3 *d, Object *object, Vec3 *intersection, Vec3 *normal) {
+__device__ int ray_intersect(Vec3 *o, Vec3 *d, Object *object, Vec3 *intersection, Vec3 *normal, double *best_t) {
     Vec3 oc;
     oc.x = o->x - object->x;
     oc.y = o->y - object->y;
@@ -128,11 +94,11 @@ __device__ int ray_intersect(Vec3 *o, Vec3 *d, Object *object, Vec3 *intersectio
 
         if (t1 > 0 || t2 > 0) {
             // Intersection found
-            double t = (t1 < t2) ? t1 : t2;
+            *best_t = (t1 < t2) ? t1 : t2;
 
-            intersection->x = o->x + t * d->x;
-            intersection->y = o->y + t * d->y;
-            intersection->z = o->z + t * d->z;
+            intersection->x = o->x + *best_t * d->x;
+            intersection->y = o->y + *best_t * d->y;
+            intersection->z = o->z + *best_t * d->z;
 
             normal->x = (intersection->x - object->x) / object->radius;
             normal->y = (intersection->y - object->y) / object->radius;
@@ -143,6 +109,78 @@ __device__ int ray_intersect(Vec3 *o, Vec3 *d, Object *object, Vec3 *intersectio
     }
 
     return 0; // No intersection
+}
+__device__ int find_closest_hit(Vec3 *o, Vec3 *d, Object *objects, int count, Vec3 *intersection, Vec3 *normal, int * clostest_object_index) {
+  double best_t = 9999;
+  Vec3 best_inter, best_normal;
+  for (int i = 0; i < count; i++) {
+    Vec3 intersection, normal;
+    double t;
+    if (ray_intersect(o, d, &(objects[i]), &intersection, &normal, &t)) {
+      if (t < best_t) {
+        best_t =t;
+        best_inter = intersection;
+        best_normal = normal;
+        *clostest_object_index = i;
+      }
+    }
+  }
+  if (best_t < 9999) {
+    *intersection = best_inter;
+    *normal = best_normal;
+    return 1;
+  }
+  else return 0;
+}
+__device__ void reflect(Vec3 *dir, Vec3 *normal, Vec3 *reflected_dir) {
+    double dot_product = dot_v(dir, normal) * 2.0;
+
+    reflected_dir->x = dir->x - dot_product * normal->x;
+    reflected_dir->y = dir->y - dot_product * normal->y;
+    reflected_dir->z = dir->z - dot_product * normal->z;
+}
+
+// Rotate a direction vector around the x axis by angle degrees
+__device__ void rotateX(Vec3 *dir, double angle) {
+    double cosA = cos(angle * M_PI / 180.0);
+    double sinA = sin(angle * M_PI / 180.0);
+
+    double newY = dir->y * cosA - dir->z * sinA;
+    double newZ = dir->y * sinA + dir->z * cosA;
+
+    dir->y = newY;
+    dir->z = newZ;
+}
+
+// Rotate a direction vector around the y axis by angle degrees
+__device__ void rotateY(Vec3 *dir, double angle) {
+    double cosA = cos(angle * M_PI / 180.0);
+    double sinA = sin(angle * M_PI / 180.0);
+
+    double newX = dir->x * cosA + dir->z * sinA;
+    double newZ = -dir->x * sinA + dir->z * cosA;
+
+    dir->x = newX;
+    dir->z = newZ;
+}
+
+// Rotate a direction vector around the z axis by angle degrees
+__device__ void rotateZ(Vec3 *dir, double angle) {
+    double cosA = cos(angle * M_PI / 180.0);
+    double sinA = sin(angle * M_PI / 180.0);
+
+    double newX = dir->x * cosA - dir->y * sinA;
+    double newY = dir->x * sinA + dir->y * cosA;
+
+    dir->x = newX;
+    dir->y = newY;
+}
+
+// Rotate a direction vector around the x, y, and z axes by given angles
+__device__ void rotateDirection(Vec3 *dir, double angleX, double angleY, double angleZ) {
+    rotateX(dir, angleX);
+    rotateY(dir, angleY);
+    rotateZ(dir, angleZ);
 }
 
 #define PC_VAL 0.005f // Pixel to Coordinate ratio w = -3,3 | h = -2,2
@@ -155,35 +193,29 @@ __global__ void test_kernel(Object *objects, int count, UCHAR *r, UCHAR *g,
     return;
   int index = x_p + y_p * w;
 
-  double x = (x_p - w / 2.0) * PC_VAL, y = (y_p - h / 2.0) * PC_VAL;
+  double x = (x_p - w / 2.0) * PC_VAL, y = (y_p - h / 2.0) * -PC_VAL;
 
   Vec3 r_origin;
   r_origin.x = 0;
-  r_origin.y = 0;
+  r_origin.y = 4.0f;
   r_origin.z = 0;
   Vec3 r_dir;
   r_dir.x = x;
   r_dir.y = y;
-  r_dir.z = 10.0f;
+  r_dir.z = 6.0f;
   divide_v(&r_dir, len_v(&r_dir));
+  rotateDirection(&r_dir, 10, 0, 0);
 
-  for (int i = 0; i < count; i++) {
-    Object o = objects[i];
-    Vec3 intersection, normal;
-    if (ray_intersect(&r_origin, &r_dir, &o, &intersection, &normal)) {
-      r[index] = o.color.r;
-      g[index] = o.color.g;
-      b[index] = o.color.b;
-      break;
-    }
+  Vec3 intersection, normal;
+  int hit_index;
+  int reflect_count = 0;
+  while(reflect_count < 1 && find_closest_hit(&r_origin, &r_dir, objects, count, &intersection, &normal, &hit_index)) {
+    reflect_count++;
+    Object o = objects[hit_index];
+    r[index] = o.color.r;
+    g[index] = o.color.g;
+    b[index] = o.color.b;
   }
-}
-__device__ void reflect(Vec3 *dir, Vec3 *normal, Vec3 *reflected_dir) {
-    double dot_product = dot_v(dir, normal) * 2.0;
-
-    reflected_dir->x = dir->x - dot_product * normal->x;
-    reflected_dir->y = dir->y - dot_product * normal->y;
-    reflected_dir->z = dir->z - dot_product * normal->z;
 }
 
 void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
