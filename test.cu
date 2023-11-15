@@ -11,54 +11,59 @@ typedef struct {
   double z;
 } Vec3;
 
-__device__ void add_v(Vec3 vec, Vec3 target) {
-  vec.x += target.x;
-  vec.y += target.y;
-  vec.z += target.z;
+__device__ void add_v(Vec3 *vec, Vec3 *target) {
+  vec->x += target->x;
+  vec->y += target->y;
+  vec->z += target->z;
 }
-__device__ void add_v(Vec3 vec, int v) {
-  vec.x += v;
-  vec.y += v;
-  vec.z += v;
+__device__ void add_v(Vec3 *vec, int v) {
+  vec->x += v;
+  vec->y += v;
+  vec->z += v;
 }
-__device__ void sub_v(Vec3 vec, Vec3 target) {
-  vec.x -= target.x;
-  vec.y -= target.y;
-  vec.z -= target.z;
+__device__ void sub_v(Vec3 *vec, Vec3 *target) {
+  vec->x -= target->x;
+  vec->y -= target->y;
+  vec->z -= target->z;
 }
-__device__ void sub_v(Vec3 vec, int v) {
-  vec.x -= v;
-  vec.y -= v;
-  vec.z -= v;
+__device__ void sub_v(Vec3 *vec, int v) {
+  vec->x -= v;
+  vec->y -= v;
+  vec->z -= v;
 }
-__device__ void mult_v(Vec3 vec, Vec3 target) {
-  vec.x *= target.x;
-  vec.y *= target.y;
-  vec.z *= target.z;
+__device__ void mult_v(Vec3 *vec, Vec3 *target) {
+  vec->x *= target->x;
+  vec->y *= target->y;
+  vec->z *= target->z;
 }
-__device__ void mult_v(Vec3 vec, int v) {
-  vec.x *= v;
-  vec.y *= v;
-  vec.z *= v;
+__device__ void mult_v(Vec3 *vec, int v) {
+  vec->x *= v;
+  vec->y *= v;
+  vec->z *= v;
 }
-__device__ void divide_v(Vec3 vec, int v) {
-  vec.x /= v;
-  vec.y /= v;
-  vec.z /= v;
+__device__ void divide_v(Vec3 *vec, int v) {
+  vec->x /= v;
+  vec->y /= v;
+  vec->z /= v;
 }
-__device__ double dot_v(Vec3 vec, Vec3 target) {
-  vec.x += target.x;
-  vec.y += target.y;
-  vec.z += target.z;
-  return vec.x * target.x + vec.y * target.y + vec.z * target.z;
+__device__ double dot_v(Vec3 *vec, Vec3 *target) {
+  vec->x += target->x;
+  vec->y += target->y;
+  vec->z += target->z;
+  return vec->x * target->x + vec->y * target->y + vec->z * target->z;
 }
-__device__ void cross_v(Vec3 vec, Vec3 target) {
-  double x = vec.x;
-  double y = vec.y;
-  double z = vec.z;
-  vec.x = y * target.z - z * target.y;
-  vec.y = -x * target.z - z * target.x;
-  vec.z = x * target.y - y * target.x;
+__device__ void cross_v(Vec3 *vec, Vec3 *target) {
+  double x = vec->x;
+  double y = vec->y;
+  double z = vec->z;
+  vec->x = y * target->z - z * target->y;
+  vec->y = -x * target->z - z * target->x;
+  vec->z = x * target->y - y * target->x;
+}
+__device__ void copy_v(Vec3 *vec, Vec3 *target) {
+  vec->x = target->x;
+  vec->y = target->y;
+  vec->z = target->z;
 }
 
 __global__ void test_kernel(Object *objects, int count, UCHAR *r, UCHAR *g,
@@ -68,16 +73,27 @@ __global__ void test_kernel(Object *objects, int count, UCHAR *r, UCHAR *g,
   if (x >= w || y >= h)
     return;
   int index = x + y * w;
-  for (int i = 0; i < count; i++) {
-    Object o = objects[i];
-    int i_x = x - o.x;
-    int i_y = y - o.y;
-    if (i_x * i_x + i_y * i_y <= o.radius * o.radius) {
-      r[index] = o.color.r;
-      g[index] = o.color.g;
-      b[index] = o.color.b;
-    }
-  }
+  Vec3 ray;
+  ray.x = x;
+  ray.y = y;
+  ray.z = 0;
+
+  Vec3 a = {.x = 255.0 / w, .y = 255.0 / h, .z = 1};
+  mult_v(&ray, &a);
+
+  r[index] = ray.x;
+  g[index] = ray.y;
+  b[index] = ray.z;
+  // for (int i = 0; i < count; i++) {
+  //   Object o = objects[i];
+  //   int i_x = x - o.x;
+  //   int i_y = y - o.y;
+  //   if (i_x * i_x + i_y * i_y <= o.radius * o.radius) {
+  //     r[index] = o.color.r;
+  //     g[index] = o.color.g;
+  //     b[index] = o.color.b;
+  //   }
+  // }
 }
 
 void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
@@ -98,6 +114,8 @@ void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
   int block_size = 16;
   dim3 thd = dim3(block_size, block_size);
   dim3 bld = dim3((w - 1) / block_size + 1, (h - 1) / block_size + 1);
+  printf("%d, %d\n", w, h);
+  printf("%d, %d\n", bld.x, bld.y);
 
   float time;
   cudaEvent_t start, stop;
