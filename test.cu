@@ -206,16 +206,24 @@ __global__ void test_kernel(Object *objects, int count, UCHAR *r, UCHAR *g,
   divide_v(&r_dir, len_v(&r_dir));
   rotateDirection(&r_dir, 10, 0, 0);
 
+  double ray_energy = 1;
+  Vec3 ray_color = {.x = 1, .y = 1, .z = 1};
+
   Vec3 intersection, normal;
   int hit_index;
   int reflect_count = 0;
-  while(reflect_count < 1 && find_closest_hit(&r_origin, &r_dir, objects, count, &intersection, &normal, &hit_index)) {
+  while(reflect_count < 2 && find_closest_hit(&r_origin, &r_dir, objects, count, &intersection, &normal, &hit_index)) {
     reflect_count++;
     Object o = objects[hit_index];
-    r[index] = o.color.r;
-    g[index] = o.color.g;
-    b[index] = o.color.b;
+    ray_color.x *= o.color.r / 255.0f;
+    ray_color.y *= o.color.g / 255.0f;
+    ray_color.z *= o.color.b / 255.0f;
+    ray_energy *= 0.9f;
   }
+    r[index] = ray_color.x * ray_energy * 255.0;
+    g[index] = ray_color.y * ray_energy * 255.0;
+    b[index] = ray_color.z * ray_energy * 255.0;
+
 }
 
 void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
