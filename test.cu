@@ -2,12 +2,24 @@ extern "C" {
 #include "pipeline.h"
 }
 #include <cuda_runtime_api.h>
-#include <curand.h>
+// #include <curand.h>
 // #include <curand_kernel.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 // #include "vec3.h"
+
+#define gpuErrchk(ans)                                                         \
+  { gpuAssert((ans), __FILE__, __LINE__); }
+inline void gpuAssert(cudaError_t code, const char *file, int line,
+                      bool abort = true) {
+  if (code != cudaSuccess) {
+    fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file,
+            line);
+    if (abort)
+      exit(code);
+  }
+}
 
 typedef struct {
   double x;
@@ -29,7 +41,7 @@ __device__ unsigned my_rand(unsigned *seed_p) {
 __device__ double my_drand(unsigned *seed_p) {
   unsigned x = my_rand(seed_p);
   double y = x / MR_DIVISOR;
-  return y;
+  return y * 0.99 + 0.01;
 }
 
 __device__ void add_v(Vec3 *vec, Vec3 *target) {
@@ -121,6 +133,7 @@ __device__ int ray_intersect(Vec3 *o, Vec3 *d, Object *object,
       normal->x = (intersection->x - object->x) / object->radius;
       normal->y = (intersection->y - object->y) / object->radius;
       normal->z = (intersection->z - object->z) / object->radius;
+      normalize_v(normal);
 
       return 1;
     }
@@ -205,8 +218,8 @@ __device__ void rotateDirection(Vec3 *dir, double angleX, double angleY,
 }
 
 __device__ float random_normal(unsigned *seed) {
-  float theta = 2 * 3.1415926 * my_rand(seed);
-  float rho = sqrt(-2 * log((double)my_rand(seed)));
+  float theta = 2 * 3.1415926 * my_drand(seed);
+  float rho = sqrt(-2 * log((double)my_drand(seed)));
   return rho * cos(theta);
 }
 __device__ void random_direction(Vec3 *target, unsigned *seed) {
@@ -218,11 +231,16 @@ __device__ void random_direction(Vec3 *target, unsigned *seed) {
 __device__ void random_direction_hemi(Vec3 *target, Vec3 *normal,
                                       unsigned *seed) {
   random_direction(target, seed);
-  if (dot_v(normal, target))
+  if (dot_v(normal, target) < 0)
     mult_v(target, -1);
 }
 
+__device__ double lerp(double a, double b, double f) {
+  return a * (1.0 - f) + (b * f);
+}
+
 #define PC_VAL 0.005f // Pixel to Coordinate ratio w = -3,3 | h = -2,2
+#define R_COUNT 10
 
 __global__ void test_kernel(Object *objects, int count, UCHAR *r, UCHAR *g,
                             UCHAR *b, int w, int h) {
@@ -231,7 +249,7 @@ __global__ void test_kernel(Object *objects, int count, UCHAR *r, UCHAR *g,
   if (x_p >= w || y_p >= h)
     return;
   int index = x_p + y_p * w;
-  unsigned seed = index;
+  unsigned int seed = index + 10;
 
   double x = (x_p - w / 2.0) * PC_VAL, y = (y_p - h / 2.0) * -PC_VAL;
 
@@ -246,38 +264,75 @@ __global__ void test_kernel(Object *objects, int count, UCHAR *r, UCHAR *g,
   divide_v(&r_dir, len_v(&r_dir));
   rotateDirection(&r_dir, 10, 0, 0);
 
+  Vec3 r_o;
+  Vec3 r_d;
   Vec3 ray_energy = {.x = 0, .y = 0, .z = 0};
   Vec3 ray_color = {.x = 1, .y = 1, .z = 1};
 
   Vec3 intersection, normal;
   int hit_index;
-  int reflect_count = 0;
-  while (reflect_count < 5 &&
-         find_closest_hit(&r_origin, &r_dir, objects, count, &intersection,
-                          &normal, &hit_index)) {
-    reflect_count++;
-    copy_v(&r_origin, &intersection);
-    // reflect(&r_dir, &normal, &r_dir);
-    random_direction_hemi(&r_dir, &normal, &seed);
+  int reflect_count;
 
-    Object o = objects[hit_index];
-    if (hit_index == 0) {
-      Vec3 object_enery;
-      object_enery.x = 1;
-      object_enery.y = 1;
-      object_enery.z = 1;
+  for (int i = 0; i < R_COUNT; i++) {
+    ray_color = {.x = 1, .y = 1, .z = 1};
+    reflect_count = 0;
+    copy_v(&r_o, &r_origin);
+    copy_v(&r_d, &r_dir);
+    r_o.x += my_drand(&seed) * 0.02 - 0.01;
+    r_o.y += my_drand(&seed) * 0.02 - 0.01;
+    while (reflect_count < 5) {
+      if (find_closest_hit(&r_o, &r_d, objects, count, &intersection, &normal,
+                           &hit_index)) {
+        Object o = objects[hit_index];
+        reflect_count++;
+        copy_v(&r_o, &intersection);
 
-      mult_v(&object_enery, &ray_color);
-      add_v(&ray_energy, &object_enery);
+        if (hit_index == 3) {
+          Vec3 ref;
+          reflect(&r_d, &normal, &ref);
+          random_direction_hemi(&r_d, &normal, &seed);
+          double rate = 0.95;
+          r_d.x = lerp(r_d.x, ref.x, rate);
+          r_d.y = lerp(r_d.y, ref.y, rate);
+          r_d.z = lerp(r_d.z, ref.z, rate);
+        } else {
+          random_direction_hemi(&r_d, &normal, &seed);
+        }
+
+        if (hit_index == 0) {
+          Vec3 object_enery;
+          object_enery.x = 50;
+          object_enery.y = 50;
+          object_enery.z = 50;
+
+          mult_v(&object_enery, &ray_color);
+          add_v(&ray_energy, &object_enery);
+        }
+
+        ray_color.x *= o.color.r / 255.0f;
+        ray_color.y *= o.color.g / 255.0f;
+        ray_color.z *= o.color.b / 255.0f;
+      } else {
+        Vec3 object_enery;
+        object_enery.x = 0.1;
+        object_enery.y = 0.1;
+        object_enery.z = 0.1;
+
+        mult_v(&object_enery, &ray_color);
+        add_v(&ray_energy, &object_enery);
+
+        ray_color.x *= 0.663f;
+        ray_color.y *= 0.949f;
+        ray_color.z *= 0.961f;
+
+        break;
+      }
     }
-    ray_color.x *= o.color.r / 255.0f;
-    ray_color.y *= o.color.g / 255.0f;
-    ray_color.z *= o.color.b / 255.0f;
   }
 
-  r[index] = ray_energy.x * 255.0;
-  g[index] = ray_energy.y * 255.0;
-  b[index] = ray_energy.z * 255.0;
+  r[index] = ray_energy.x * 255.0 / R_COUNT;
+  g[index] = ray_energy.y * 255.0 / R_COUNT;
+  b[index] = ray_energy.z * 255.0 / R_COUNT;
 }
 
 void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
@@ -308,8 +363,8 @@ void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
   cudaEventRecord(start, 0);
 
   test_kernel<<<bld, thd>>>(d_objects, scene->count, r, g, b, w, h);
-  cudaDeviceSynchronize();
-  cudaDeviceSynchronize();
+  gpuErrchk(cudaPeekAtLastError());
+  gpuErrchk(cudaDeviceSynchronize());
   cudaEventRecord(stop, 0);
   cudaEventSynchronize(stop);
   cudaEventElapsedTime(&time, start, stop);
