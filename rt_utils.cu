@@ -14,6 +14,44 @@ __device__ unsigned my_rand(unsigned *seed_p) {
   return *seed_p;
 }
 
+Scene *sample_scene_cuda() {
+  Object objects[] = {
+      {.x = -75,
+       .y = 75,
+       .z = 200,
+       .radius = 100,
+       .color = {.r = 0, .g = 0, .b = 0}},
+      {.x = 0,
+       .y = -1000,
+       .z = 50,
+       .radius = 1000,
+       .color = {.r = 100, .g = 100, .b = 100}},
+      {.x = -3,
+       .y = 1,
+       .z = 20,
+       .radius = 1,
+       .color = {.r = 100, .g = 200, .b = 100}},
+      {.x = 0,
+       .y = 5,
+       .z = 40,
+       .radius = 5,
+       .color = {.r = 200, .g = 100, .b = 50}},
+      {.x = 3,
+       .y = 1,
+       .z = 20,
+       .radius = 1,
+       .color = {.r = 100, .g = 100, .b = 200}},
+      {.x = 10,
+       .y = 1,
+       .z = 30,
+       .radius = 1,
+       .color = {.r = 100, .g = 100, .b = 200}},
+  };
+  int count = sizeof(objects) / sizeof(objects[0]);
+
+  return create_scene(objects, count);
+}
+
 __device__ double my_drand(unsigned *seed_p) {
   unsigned x = my_rand(seed_p);
   double y = x / MR_DIVISOR;

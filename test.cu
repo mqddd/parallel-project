@@ -163,7 +163,7 @@ int main() {
                              .debug = 1,
                              .save = 1,
                              .out_file = (char *)"test_cu.bmp"};
-  Scene *scene = sample_scene1();
+  Scene *scene = sample_scene_cuda();
 
   pipeline(scene, setting, test_renderer);
 
