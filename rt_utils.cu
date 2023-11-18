@@ -20,7 +20,7 @@ Scene *sample_scene_cuda() {
        .y = 75,
        .z = 200,
        .radius = 100,
-       .color = {.r = 0, .g = 0, .b = 0}},
+       .color = {.r = 5, .g = 5, .b = 5}},
       {.x = 0,
        .y = -1000,
        .z = 50,
@@ -35,7 +35,7 @@ Scene *sample_scene_cuda() {
        .y = 5,
        .z = 40,
        .radius = 5,
-       .color = {.r = 200, .g = 100, .b = 50}},
+       .color = {.r = 255, .g = 255, .b = 255}},
       {.x = 3,
        .y = 1,
        .z = 20,
@@ -46,6 +46,21 @@ Scene *sample_scene_cuda() {
        .z = 30,
        .radius = 1,
        .color = {.r = 100, .g = 100, .b = 200}},
+      {.x = 3,
+       .y = 5,
+       .z = 20,
+       .radius = 1,
+       .color = {.r = 255, .g = 5, .b = 5}},
+      {.x = 10,
+       .y = 5,
+       .z = 30,
+       .radius = 1,
+       .color = {.r = 5, .g = 100, .b = 100}},
+      {.x = 10,
+       .y = 1,
+       .z = 25,
+       .radius = 0.2,
+       .color = {.r = 5, .g = 100, .b = 100}},
   };
   int count = sizeof(objects) / sizeof(objects[0]);
 
@@ -135,6 +150,19 @@ __device__ void random_direction_hemi(Vec3 *target, Vec3 *normal,
   random_direction(target, seed);
   if (dot_v(normal, target) < 0)
     mult_v(target, -1);
+}
+__device__ void random_direction_hemi_and_lerp(Vec3 *target, Vec3 *normal,
+                                               unsigned *seed, double lerp) {
+  float rx = random_normal(seed);
+  float ry = random_normal(seed);
+  float rz = random_normal(seed);
+  float dot = rx * normal->x + ry * normal->y + rz * normal->z;
+  rx = dot < 0 ? -rx : rx;
+  ry = dot < 0 ? -ry : ry;
+  rz = dot < 0 ? -rz : rz;
+  target->x = target->x * (1.0 - lerp) + (rx * lerp);
+  target->y = target->y * (1.0 - lerp) + (ry * lerp);
+  target->z = target->z * (1.0 - lerp) + (rz * lerp);
 }
 
 __device__ double lerp(double a, double b, double f) {

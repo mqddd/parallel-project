@@ -18,111 +18,157 @@ inline void gpuAssert(cudaError_t code, const char *file, int line,
   }
 }
 
-#define PC_VAL 0.005f // Pixel to Coordinate ratio w = -3,3 | h = -2,2
-#define R_COUNT 10
+__device__ void pixel_ray(double x, double y, Vec3 *origin, Vec3 *direction) {
+  origin->x = 0;
+  origin->y = 4.0f;
+  origin->z = 0;
 
-__global__ void test_kernel(Object *objects, int count, UCHAR *r, UCHAR *g,
-                            UCHAR *b, int w, int h) {
-  int x_p = blockDim.x * blockIdx.x + threadIdx.x;
-  int y_p = blockDim.y * blockIdx.y + threadIdx.y;
-  if (x_p >= w || y_p >= h)
-    return;
-  int index = x_p + y_p * w;
-  unsigned int seed = index + 10;
+  direction->x = x;
+  direction->y = y;
+  direction->z = 6.0f;
+  divide_v(direction, len_v(direction));
+  rotateDirection(direction, 10, 0, 0);
+}
 
-  double x = (x_p - w / 2.0) * PC_VAL, y = (y_p - h / 2.0) * -PC_VAL;
-
-  Vec3 r_origin;
-  r_origin.x = 0;
-  r_origin.y = 4.0f;
-  r_origin.z = 0;
-  Vec3 r_dir;
-  r_dir.x = x;
-  r_dir.y = y;
-  r_dir.z = 6.0f;
-  divide_v(&r_dir, len_v(&r_dir));
-  rotateDirection(&r_dir, 10, 0, 0);
-
-  Vec3 r_o;
-  Vec3 r_d;
-  Vec3 ray_energy = {.x = 0, .y = 0, .z = 0};
+__device__ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
+                          Object *objects, int object_count, Vec3 *ray_energy,
+                          unsigned *seed) {
   Vec3 ray_color = {.x = 1, .y = 1, .z = 1};
 
   Vec3 intersection, normal;
   int hit_index;
   int reflect_count;
+  Vec3 r_o;
+  Vec3 r_d;
 
-  for (int i = 0; i < R_COUNT; i++) {
+  for (int i = 0; i < ray_count; i++) {
     ray_color = {.x = 1, .y = 1, .z = 1};
     reflect_count = 0;
-    copy_v(&r_o, &r_origin);
-    copy_v(&r_d, &r_dir);
-    r_o.x += my_drand(&seed) * 0.02 - 0.01;
-    r_o.y += my_drand(&seed) * 0.02 - 0.01;
+    copy_v(&r_o, origin);
+    copy_v(&r_d, direction);
+    r_o.x += my_drand(seed) * 0.05 - 0.025;
+    r_o.y += my_drand(seed) * 0.05 - 0.025;
     while (reflect_count < 5) {
-      if (find_closest_hit(&r_o, &r_d, objects, count, &intersection, &normal,
-                           &hit_index)) {
-        Object o = objects[hit_index];
+      if (find_closest_hit(&r_o, &r_d, objects, object_count, &intersection,
+                           &normal, &hit_index)) {
         reflect_count++;
+        float o_r = objects[hit_index].color.r;
+        float o_g = objects[hit_index].color.g;
+        float o_b = objects[hit_index].color.b;
+
+        float reflect_ray = hit_index == 3 ? 1 : 0.1;
+        float glow_ray = hit_index == 0 ? 2 : hit_index == 8 ? 50 : 0.0;
+
         copy_v(&r_o, &intersection);
+        reflect(&r_d, &normal, &r_d);
+        random_direction_hemi_and_lerp(&r_d, &normal, seed, 1.0 - reflect_ray);
+        normalize_v(&r_d);
 
-        if (hit_index == 3) {
-          Vec3 ref;
-          reflect(&r_d, &normal, &ref);
-          random_direction_hemi(&r_d, &normal, &seed);
-          double rate = 0.95;
-          r_d.x = lerp(r_d.x, ref.x, rate);
-          r_d.y = lerp(r_d.y, ref.y, rate);
-          r_d.z = lerp(r_d.z, ref.z, rate);
-        } else {
-          random_direction_hemi(&r_d, &normal, &seed);
-        }
+        Vec3 emitted_light;
+        emitted_light.x = glow_ray;
+        emitted_light.y = glow_ray;
+        emitted_light.z = glow_ray;
 
-        if (hit_index == 0) {
-          Vec3 object_enery;
-          object_enery.x = 50;
-          object_enery.y = 50;
-          object_enery.z = 50;
+        mult_v(&emitted_light, &ray_color);
+        add_v(ray_energy, &emitted_light);
 
-          mult_v(&object_enery, &ray_color);
-          add_v(&ray_energy, &object_enery);
-        }
-
-        ray_color.x *= o.color.r / 255.0f;
-        ray_color.y *= o.color.g / 255.0f;
-        ray_color.z *= o.color.b / 255.0f;
+        ray_color.x *= o_r / 255.0f;
+        ray_color.y *= o_g / 255.0f;
+        ray_color.z *= o_b / 255.0f;
       } else {
-        Vec3 object_enery;
-        object_enery.x = 0.1;
-        object_enery.y = 0.1;
-        object_enery.z = 0.1;
+        float sky_emitted_light_strength = 0.2;
+        Vec3 sky_color;
+        sky_color.x = 0.863f;
+        sky_color.y = 0.949f;
+        sky_color.z = 0.961f;
+        Vec3 sky_emitted_light;
+        sky_emitted_light.x = sky_emitted_light_strength;
+        sky_emitted_light.y = sky_emitted_light_strength;
+        sky_emitted_light.z = sky_emitted_light_strength;
 
-        mult_v(&object_enery, &ray_color);
-        add_v(&ray_energy, &object_enery);
+        mult_v(&sky_emitted_light, &sky_color);
 
-        ray_color.x *= 0.663f;
-        ray_color.y *= 0.949f;
-        ray_color.z *= 0.961f;
+        mult_v(&sky_emitted_light, &ray_color);
+        add_v(ray_energy, &sky_emitted_light);
 
         break;
       }
     }
   }
 
-  r[index] = ray_energy.x * 255.0 / R_COUNT;
-  g[index] = ray_energy.y * 255.0 / R_COUNT;
-  b[index] = ray_energy.z * 255.0 / R_COUNT;
+  ray_energy->x /= ray_count;
+  ray_energy->y /= ray_count;
+  ray_energy->z /= ray_count;
+}
+
+#define PC_VAL 0.005f // Pixel to Coordinate ratio w = -3,3 | h = -2,2
+#define R_COUNT 10
+
+__global__ void test_kernel(Object *objects, int count, UCHAR *r, UCHAR *g,
+                            UCHAR *b, int w, int h, int rays) {
+  int x_p = (blockDim.x * blockIdx.x + threadIdx.x) / rays;
+  int y_p = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (x_p >= w || y_p >= h)
+    return;
+  int index = blockDim.x * blockIdx.x + threadIdx.x + y_p * (w * rays);
+  unsigned int seed = index + 10;
+
+  double x = (x_p - w / 2.0) * PC_VAL, y = (y_p - h / 2.0) * -PC_VAL;
+
+  Vec3 r_origin;
+  Vec3 r_dir;
+  pixel_ray(x, y, &r_origin, &r_dir);
+
+  Vec3 ray_energy = {.x = 0, .y = 0, .z = 0};
+  trace_ray(&r_origin, &r_dir, R_COUNT, objects, count, &ray_energy, &seed);
+
+  r[index] = (ray_energy.x > 1 ? 1 : ray_energy.x) * 255.0;
+  g[index] = (ray_energy.y > 1 ? 1 : ray_energy.y) * 255.0;
+  b[index] = (ray_energy.z > 1 ? 1 : ray_energy.z) * 255.0;
+}
+
+__global__ void average_kernel(UCHAR *r, UCHAR *g, UCHAR *b, UCHAR *r_out,
+                               UCHAR *g_out, UCHAR *b_out, int w, int h,
+                               int rays) {
+  int x_p = blockDim.x * blockIdx.x + threadIdx.x;
+  int y_p = blockDim.y * blockIdx.y + threadIdx.y;
+  if (x_p >= w || y_p >= h)
+    return;
+  int index = x_p + y_p * w;
+
+  int rp = 0;
+  int gp = 0;
+  int bp = 0;
+  for (int i = 0; i < rays; i++) {
+    int in_index = (x_p * rays) + i + y_p * (w * rays);
+    rp += r[in_index];
+    gp += g[in_index];
+    bp += b[in_index];
+  }
+
+  r_out[index] = rp / rays;
+  g_out[index] = gp / rays;
+  b_out[index] = bp / rays;
 }
 
 void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
   int w = frame->width;
   int h = frame->height;
+  int rays = 10;
   UCHAR *r;
-  cudaMalloc(&r, sizeof(UCHAR) * w * h);
+  cudaMalloc(&r, sizeof(UCHAR) * w * h * rays);
   UCHAR *g;
-  cudaMalloc(&g, sizeof(UCHAR) * w * h);
+  cudaMalloc(&g, sizeof(UCHAR) * w * h * rays);
   UCHAR *b;
-  cudaMalloc(&b, sizeof(UCHAR) * w * h);
+  cudaMalloc(&b, sizeof(UCHAR) * w * h * rays);
+
+  UCHAR *r_out;
+  cudaMalloc(&r_out, sizeof(UCHAR) * w * h);
+  UCHAR *g_out;
+  cudaMalloc(&g_out, sizeof(UCHAR) * w * h);
+  UCHAR *b_out;
+  cudaMalloc(&b_out, sizeof(UCHAR) * w * h);
 
   Object *d_objects;
   cudaMalloc(&d_objects, sizeof(Object) * scene->count);
@@ -131,7 +177,7 @@ void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
 
   int block_size = 16;
   dim3 thd = dim3(block_size, block_size);
-  dim3 bld = dim3((w - 1) / block_size + 1, (h - 1) / block_size + 1);
+  dim3 bld = dim3((w * rays - 1) / block_size + 1, (h - 1) / block_size + 1);
   printf("%d, %d\n", w, h);
   printf("%d, %d\n", bld.x, bld.y);
 
@@ -141,7 +187,7 @@ void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
   cudaEventCreate(&stop);
   cudaEventRecord(start, 0);
 
-  test_kernel<<<bld, thd>>>(d_objects, scene->count, r, g, b, w, h);
+  test_kernel<<<bld, thd>>>(d_objects, scene->count, r, g, b, w, h, rays);
   gpuErrchk(cudaPeekAtLastError());
   gpuErrchk(cudaDeviceSynchronize());
   cudaEventRecord(stop, 0);
@@ -149,17 +195,30 @@ void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
   cudaEventElapsedTime(&time, start, stop);
   printf("GPU kernel took %.4f ms \n\n", time);
 
-  cudaMemcpy(frame->r, r, w * h, cudaMemcpyDeviceToHost);
-  cudaMemcpy(frame->g, g, w * h, cudaMemcpyDeviceToHost);
-  cudaMemcpy(frame->b, b, w * h, cudaMemcpyDeviceToHost);
+  // ----
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
+  cudaEventRecord(start, 0);
+
+  average_kernel<<<bld, thd>>>(r, g, b, r_out, g_out, b_out, w, h, rays);
+  gpuErrchk(cudaPeekAtLastError());
+  gpuErrchk(cudaDeviceSynchronize());
+  cudaEventRecord(stop, 0);
+  cudaEventSynchronize(stop);
+  cudaEventElapsedTime(&time, start, stop);
+  printf("Average kernel took %.4f ms \n\n", time);
+
+  cudaMemcpy(frame->r, r_out, w * h, cudaMemcpyDeviceToHost);
+  cudaMemcpy(frame->g, g_out, w * h, cudaMemcpyDeviceToHost);
+  cudaMemcpy(frame->b, b_out, w * h, cudaMemcpyDeviceToHost);
   cudaFree(r);
   cudaFree(g);
   cudaFree(b);
 }
 
 int main() {
-  PipelineSetting setting = {.width = 1200,
-                             .height = 800,
+  PipelineSetting setting = {.width = 400,
+                             .height = 200,
                              .debug = 1,
                              .save = 1,
                              .out_file = (char *)"test_cu.bmp"};
