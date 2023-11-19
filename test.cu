@@ -18,6 +18,12 @@ inline void gpuAssert(cudaError_t code, const char *file, int line,
   }
 }
 
+#define VP_W 4.0f
+#define VP_H VP_W * 9 / 16
+#define DIAFRAGM 0.01f
+#define FOCAL 6.0f
+#define R_COUNT 5
+
 __device__ void pixel_ray(double x, double y, Vec3 *origin, Vec3 *direction) {
   origin->x = 0;
   origin->y = 4.0f;
@@ -25,9 +31,10 @@ __device__ void pixel_ray(double x, double y, Vec3 *origin, Vec3 *direction) {
 
   direction->x = x;
   direction->y = y;
-  direction->z = 6.0f;
+  direction->z = FOCAL;
   divide_v(direction, len_v(direction));
   rotateDirection(direction, 7, 0, 0);
+  normalize_v(direction);
 }
 
 __device__ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
@@ -47,8 +54,10 @@ __device__ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
     reflect_count = 0;
     copy_v(&r_o, origin);
     copy_v(&r_d, direction);
-    r_o.x += my_drand(seed) * 0.05 - 0.025;
-    r_o.y += my_drand(seed) * 0.05 - 0.025;
+    prev_hit_index = -1;
+    r_o.x += my_drand(seed) * DIAFRAGM - DIAFRAGM / 2;
+    r_o.y += my_drand(seed) * DIAFRAGM - DIAFRAGM / 2;
+    normalize_v(&r_d);
     while (reflect_count < 15) {
       if (find_closest_hit(&r_o, &r_d, objects, object_count, prev_hit_index,
                            &intersection, &normal, &hit_index)) {
@@ -109,10 +118,6 @@ __device__ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
     ray_energy->z /= max_e;
   }
 }
-
-#define VP_W 4.0f
-#define VP_H VP_W * 9 / 16
-#define R_COUNT 5
 
 __global__ void test_kernel(Object *objects, int count, UCHAR *r, UCHAR *g,
                             UCHAR *b, int w, int h, int rays) {

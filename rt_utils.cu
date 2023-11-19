@@ -103,8 +103,8 @@ __device__ int find_closest_hit(Vec3 *o, Vec3 *d, Object *objects, int count,
   double best_dst = 9999999;
   Vec3 best_inter, best_normal;
   for (int i = 0; i < count; i++) {
-    // if (last_hit_index == i)
-    //   continue;
+    if (last_hit_index == i)
+      continue;
     double t;
     if (ray_intersect(o, d, &(objects[i]), intersection, normal, &t)) {
       if (t < best_dst) {
