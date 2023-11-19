@@ -27,7 +27,7 @@ __device__ void pixel_ray(double x, double y, Vec3 *origin, Vec3 *direction) {
   direction->y = y;
   direction->z = 6.0f;
   divide_v(direction, len_v(direction));
-  rotateDirection(direction, 10, 0, 0);
+  rotateDirection(direction, 7, 0, 0);
 }
 
 __device__ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
@@ -36,10 +36,11 @@ __device__ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
   Vec3 ray_color = {.x = 1, .y = 1, .z = 1};
 
   Vec3 intersection, normal;
-  int hit_index;
-  int reflect_count;
-  Vec3 r_o;
-  Vec3 r_d;
+  int hit_index, reflect_count, prev_hit_index = -1;
+  Vec3 r_o, r_d, emitted_light;
+
+  Vec3 sky_color, sky_emitted_light;
+  float sky_emitted_light_strength = 0.15;
 
   for (int i = 0; i < ray_count; i++) {
     ray_color = {.x = 1, .y = 1, .z = 1};
@@ -48,40 +49,46 @@ __device__ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
     copy_v(&r_d, direction);
     r_o.x += my_drand(seed) * 0.05 - 0.025;
     r_o.y += my_drand(seed) * 0.05 - 0.025;
-    while (reflect_count < 5) {
-      if (find_closest_hit(&r_o, &r_d, objects, object_count, &intersection,
-                           &normal, &hit_index)) {
+    while (reflect_count < 15) {
+      if (find_closest_hit(&r_o, &r_d, objects, object_count, prev_hit_index,
+                           &intersection, &normal, &hit_index)) {
         reflect_count++;
-        float o_r = objects[hit_index].color.r;
-        float o_g = objects[hit_index].color.g;
-        float o_b = objects[hit_index].color.b;
-
-        float reflect_ray = hit_index == 3 ? 1 : 0.1;
-        float glow_ray = hit_index == 0 ? 2 : hit_index == 8 ? 50 : 0.0;
+        Object *obj = &objects[hit_index];
+        prev_hit_index = hit_index;
 
         copy_v(&r_o, &intersection);
         reflect(&r_d, &normal, &r_d);
-        random_direction_hemi_and_lerp(&r_d, &normal, seed, 1.0 - reflect_ray);
+        random_direction_hemi_and_lerp(&r_d, &normal, seed,
+                                       1.0 - obj->material.specular_rate);
         normalize_v(&r_d);
 
-        Vec3 emitted_light;
-        emitted_light.x = glow_ray;
-        emitted_light.y = glow_ray;
-        emitted_light.z = glow_ray;
+        emitted_light.x = obj->material.emission_color.a;
+        emitted_light.y = obj->material.emission_color.b;
+        emitted_light.z = obj->material.emission_color.c;
+        mult_v(&emitted_light, obj->material.emission_strength);
 
         mult_v(&emitted_light, &ray_color);
         add_v(ray_energy, &emitted_light);
+        float max_e = max(ray_energy->x, max(ray_energy->y, ray_energy->z));
+        // if (max_e > 1) {
+        //   ray_energy->x /= max_e;
+        //   ray_energy->y /= max_e;
+        //   ray_energy->z /= max_e;
+        // }
 
-        ray_color.x *= o_r / 255.0f;
-        ray_color.y *= o_g / 255.0f;
-        ray_color.z *= o_b / 255.0f;
+        ray_color.x *= obj->material.color.a / 255.0f;
+        ray_color.y *= obj->material.color.b / 255.0f;
+        ray_color.z *= obj->material.color.c / 255.0f;
+        float max_c = max(ray_color.x, max(ray_color.y, ray_color.z));
+        if (max_c > 1) {
+          ray_color.x /= max_c;
+          ray_color.y /= max_c;
+          ray_color.z /= max_c;
+        }
       } else {
-        float sky_emitted_light_strength = 0.2;
-        Vec3 sky_color;
         sky_color.x = 0.863f;
         sky_color.y = 0.949f;
         sky_color.z = 0.961f;
-        Vec3 sky_emitted_light;
         sky_emitted_light.x = sky_emitted_light_strength;
         sky_emitted_light.y = sky_emitted_light_strength;
         sky_emitted_light.z = sky_emitted_light_strength;
@@ -90,19 +97,32 @@ __device__ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
 
         mult_v(&sky_emitted_light, &ray_color);
         add_v(ray_energy, &sky_emitted_light);
+        float max_e = max(ray_energy->x, max(ray_energy->y, ray_energy->z));
+        // if (max_e > 1) {
+        //   ray_energy->x /= max_e;
+        //   ray_energy->y /= max_e;
+        //   ray_energy->z /= max_e;
+        // }
 
         break;
       }
     }
   }
 
+  float max_e = max(ray_energy->x, max(ray_energy->y, ray_energy->z));
+  // if (max_e > 1) {
+  //   ray_energy->x /= max_e;
+  //   ray_energy->y /= max_e;
+  //   ray_energy->z /= max_e;
+  // }
   ray_energy->x /= ray_count;
   ray_energy->y /= ray_count;
   ray_energy->z /= ray_count;
 }
 
-#define PC_VAL 0.005f // Pixel to Coordinate ratio w = -3,3 | h = -2,2
-#define R_COUNT 10
+#define VP_W 4.0f
+#define VP_H VP_W * 9 / 16
+#define R_COUNT 5
 
 __global__ void test_kernel(Object *objects, int count, UCHAR *r, UCHAR *g,
                             UCHAR *b, int w, int h, int rays) {
@@ -114,7 +134,8 @@ __global__ void test_kernel(Object *objects, int count, UCHAR *r, UCHAR *g,
   int index = blockDim.x * blockIdx.x + threadIdx.x + y_p * (w * rays);
   unsigned int seed = index + 10;
 
-  double x = (x_p - w / 2.0) * PC_VAL, y = (y_p - h / 2.0) * -PC_VAL;
+  double x = ((x_p - w / 2.0) / w) * VP_W * 2,
+         y = -((y_p - h / 2.0) / h) * VP_H * 2;
 
   Vec3 r_origin;
   Vec3 r_dir;
@@ -155,7 +176,7 @@ __global__ void average_kernel(UCHAR *r, UCHAR *g, UCHAR *b, UCHAR *r_out,
 void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
   int w = frame->width;
   int h = frame->height;
-  int rays = 10;
+  int rays = 5;
   UCHAR *r;
   cudaMalloc(&r, sizeof(UCHAR) * w * h * rays);
   UCHAR *g;
@@ -217,8 +238,10 @@ void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
 }
 
 int main() {
-  PipelineSetting setting = {.width = 400,
-                             .height = 200,
+  int width = 1200;
+  int height = width * 9 / 16;
+  PipelineSetting setting = {.width = width,
+                             .height = height,
                              .debug = 1,
                              .save = 1,
                              .out_file = (char *)"test_cu.bmp"};

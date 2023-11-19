@@ -16,51 +16,44 @@ __device__ unsigned my_rand(unsigned *seed_p) {
 
 Scene *sample_scene_cuda() {
   Object objects[] = {
-      {.x = -75,
-       .y = 75,
-       .z = 200,
+      {.pos = {.a = -75, .b = 75, .c = 200},
        .radius = 100,
-       .color = {.r = 5, .g = 5, .b = 5}},
-      {.x = 0,
-       .y = -1000,
-       .z = 50,
+       .material =
+           {
+               .color = {.a = 5, .b = 5, .c = 5},
+               .emission_color = {.a = 1, .b = 1, .c = 1},
+               .emission_strength = 3,
+           }},
+      {.pos = {.a = 0, .b = -1000, .c = 50},
        .radius = 1000,
-       .color = {.r = 100, .g = 100, .b = 100}},
-      {.x = -3,
-       .y = 1,
-       .z = 20,
+       .material = {.color = {.a = 100, .b = 100, .c = 100}}},
+      {.pos = {.a = -3, .b = 1, .c = 20},
        .radius = 1,
-       .color = {.r = 100, .g = 200, .b = 100}},
-      {.x = 0,
-       .y = 5,
-       .z = 40,
-       .radius = 5,
-       .color = {.r = 255, .g = 255, .b = 255}},
-      {.x = 3,
-       .y = 1,
-       .z = 20,
+       .material = {.color = {.a = 255, .b = 5, .c = 5}}},
+      {.pos = {.a = 0, .b = 5, .c = 40},
+       .radius = 10,
+       .material = {.color = {.a = 230, .b = 230, .c = 255},
+                    .specular_rate = 1}},
+      {.pos = {.a = 3, .b = 1, .c = 20},
        .radius = 1,
-       .color = {.r = 100, .g = 100, .b = 200}},
-      {.x = 10,
-       .y = 1,
-       .z = 30,
+       .material = {.color = {.a = 0, .b = 0, .c = 255},
+                    .emission_color = {.a = 0.1, .b = 0.1, .c = 1},
+                    .emission_strength = 5}},
+      {.pos = {.a = 10, .b = 1, .c = 30},
        .radius = 1,
-       .color = {.r = 100, .g = 100, .b = 200}},
-      {.x = 3,
-       .y = 5,
-       .z = 20,
+       .material = {.color = {.a = 100, .b = 100, .c = 200}}},
+      {.pos = {.a = 2, .b = 10, .c = 20},
+       .radius = 4,
+       .material = {.color = {.a = 255, .b = 200, .c = 255},
+                    .specular_rate = 1}},
+      {.pos = {.a = 10, .b = 5, .c = 30},
        .radius = 1,
-       .color = {.r = 255, .g = 5, .b = 5}},
-      {.x = 10,
-       .y = 5,
-       .z = 30,
-       .radius = 1,
-       .color = {.r = 5, .g = 100, .b = 100}},
-      {.x = 10,
-       .y = 1,
-       .z = 25,
+       .material = {.color = {.a = 5, .b = 100, .c = 100}}},
+      {.pos = {.a = 10, .b = 1, .c = 25},
        .radius = 0.2,
-       .color = {.r = 5, .g = 100, .b = 100}},
+       .material = {.color = {.a = 255, .b = 5, .c = 5},
+                    .emission_color = {.a = 1, .b = 1, .c = 1},
+                    .emission_strength = 50}},
   };
   int count = sizeof(objects) / sizeof(objects[0]);
 
@@ -76,33 +69,41 @@ __device__ double my_drand(unsigned *seed_p) {
 __device__ int ray_intersect(Vec3 *o, Vec3 *d, Object *object,
                              Vec3 *intersection, Vec3 *normal, double *best_t) {
   Vec3 oc;
-  oc.x = o->x - object->x;
-  oc.y = o->y - object->y;
-  oc.z = o->z - object->z;
+  oc.x = o->x - object->pos.a;
+  oc.y = o->y - object->pos.b;
+  oc.z = o->z - object->pos.c;
 
   double a = dot_v(d, d);
   double b = 2.0 * dot_v(&oc, d);
   double c = dot_v(&oc, &oc) - object->radius * object->radius;
   double discriminant = b * b - 4 * a * c;
 
-  if (discriminant < 0) {
+  if (discriminant < 0 || b > 0) {
     return 0;
   } else {
     double sqrt_discr = sqrt(discriminant);
-    double t1 = (-b - sqrt_discr) / (2 * a);
-    double t2 = (-b + sqrt_discr) / (2 * a);
+    *best_t = (-b - sqrt_discr) / (2 * a);
+    // double t2 = (-b + sqrt_discr) / (2 * a);
+    // double t2 = -1;
 
-    if (t1 > 0 || t2 > 0) {
-      *best_t = (t1 < t2) ? t1 : t2;
+    // if (t1 > 0 && t2 > 0)
+    //   *best_t = min(t1, t2);
+    // else if (t1 > 0) {
+    //   *best_t = t1;
+    // } else if (t2 > 0) {
+    //   *best_t = t2;
+    // } else {
+    //   *best_t = -1;
+    // }
+    if (*best_t > 0) {
 
       intersection->x = o->x + *best_t * d->x;
       intersection->y = o->y + *best_t * d->y;
       intersection->z = o->z + *best_t * d->z;
 
-      normal->x = (intersection->x - object->x) / object->radius;
-      normal->y = (intersection->y - object->y) / object->radius;
-      normal->z = (intersection->z - object->z) / object->radius;
-      normalize_v(normal);
+      normal->x = (intersection->x - object->pos.a) / object->radius;
+      normal->y = (intersection->y - object->pos.b) / object->radius;
+      normal->z = (intersection->z - object->pos.c) / object->radius;
 
       return 1;
     }
@@ -111,14 +112,15 @@ __device__ int ray_intersect(Vec3 *o, Vec3 *d, Object *object,
   return 0;
 }
 __device__ int find_closest_hit(Vec3 *o, Vec3 *d, Object *objects, int count,
-                                Vec3 *intersection, Vec3 *normal,
-                                int *clostest_object_index) {
-  double best_t = 9999;
-  Vec3 best_inter, best_normal;
+                                int last_hit_index, Vec3 *intersection,
+                                Vec3 *normal, int *clostest_object_index) {
+  double best_t = 9999999;
+  Vec3 *best_inter, *best_normal;
   for (int i = 0; i < count; i++) {
-    Vec3 intersection, normal;
+    // if (last_hit_index == i)
+    //   continue;
     double t;
-    if (ray_intersect(o, d, &(objects[i]), &intersection, &normal, &t)) {
+    if (ray_intersect(o, d, &(objects[i]), intersection, normal, &t)) {
       if (t < best_t) {
         best_t = t;
         best_inter = intersection;
@@ -127,9 +129,13 @@ __device__ int find_closest_hit(Vec3 *o, Vec3 *d, Object *objects, int count,
       }
     }
   }
-  if (best_t < 9999) {
-    *intersection = best_inter;
-    *normal = best_normal;
+  if (best_t < 9999999) {
+    intersection = best_inter;
+    normal = best_normal;
+    normalize_v(normal);
+    intersection->x += normal->x * 0.01;
+    intersection->y += normal->y * 0.01;
+    intersection->z += normal->z * 0.01;
     return 1;
   } else
     return 0;
