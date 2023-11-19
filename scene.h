@@ -1,16 +1,20 @@
-typedef struct Color {
-  int r;
-  int g;
-  int b;
-} Color;
+typedef struct {
+  float a;
+  float b;
+  float c;
+} Float3;
 
-typedef struct Object {
-  float x;
-  float y;
-  float z;
+typedef struct {
+  Float3 color;
+  Float3 emission_color;
+  float specular_rate;
+  float emission_strength;
+} Material;
 
+typedef struct {
+  Float3 pos;
   float radius;
-  Color color;
+  Material material;
 } Object;
 
 typedef struct Scene {
