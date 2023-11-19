@@ -70,15 +70,10 @@ __device__ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
         mult_v(&emitted_light, &ray_color);
         add_v(ray_energy, &emitted_light);
         float max_e = max(ray_energy->x, max(ray_energy->y, ray_energy->z));
-        // if (max_e > 1) {
-        //   ray_energy->x /= max_e;
-        //   ray_energy->y /= max_e;
-        //   ray_energy->z /= max_e;
-        // }
 
-        ray_color.x *= obj->material.color.a / 255.0f;
-        ray_color.y *= obj->material.color.b / 255.0f;
-        ray_color.z *= obj->material.color.c / 255.0f;
+        ray_color.x *= obj->material.color.a;
+        ray_color.y *= obj->material.color.b;
+        ray_color.z *= obj->material.color.c;
         float max_c = max(ray_color.x, max(ray_color.y, ray_color.z));
         if (max_c > 1) {
           ray_color.x /= max_c;
@@ -98,26 +93,21 @@ __device__ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
         mult_v(&sky_emitted_light, &ray_color);
         add_v(ray_energy, &sky_emitted_light);
         float max_e = max(ray_energy->x, max(ray_energy->y, ray_energy->z));
-        // if (max_e > 1) {
-        //   ray_energy->x /= max_e;
-        //   ray_energy->y /= max_e;
-        //   ray_energy->z /= max_e;
-        // }
 
         break;
       }
     }
   }
 
-  float max_e = max(ray_energy->x, max(ray_energy->y, ray_energy->z));
-  // if (max_e > 1) {
-  //   ray_energy->x /= max_e;
-  //   ray_energy->y /= max_e;
-  //   ray_energy->z /= max_e;
-  // }
   ray_energy->x /= ray_count;
   ray_energy->y /= ray_count;
   ray_energy->z /= ray_count;
+  float max_e = max(ray_energy->x, max(ray_energy->y, ray_energy->z));
+  if (max_e > 1) {
+    ray_energy->x /= max_e;
+    ray_energy->y /= max_e;
+    ray_energy->z /= max_e;
+  }
 }
 
 #define VP_W 4.0f
