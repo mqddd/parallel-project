@@ -19,8 +19,9 @@ void free_scene(Scene * scene) {
 
 Scene *sample_scene1() {
   Object objects[] = {
-      {.x = 100, .y = 200, .z = 10, .radius = 45, .color = {.r = 100, .g = 100, .b = 100}},
+      {.x = 100, .y = 200, .z = 10, .radius = 145, .color = {.r = 100, .g = 100, .b = 100}},
       {.x = 300, .y = 500, .z = 0, .radius = 60, .color = {.r = 200, .g = 100, .b = 50}},
+      {.x = 700, .y = 500, .z = 10, .radius = 20, .color = {.r = 22, .g = 190, .b = 150}},
   };
   int count = sizeof(objects) / sizeof(objects[0]);
 
