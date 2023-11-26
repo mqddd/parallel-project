@@ -37,7 +37,6 @@ inline void gpuAssert(cudaError_t code, const char *file, int line,
 #define DIAFRAGM 0.01f
 #define FOCAL 10
 #define RAY_BOUNCE_LIMIT 10
-#define RAY_COERCION_RATE 3
 
 __device__ __forceinline__ void pixel_ray(float x, float y, Vec3 *origin,
                                           Vec3 *direction) {
@@ -194,7 +193,7 @@ __global__ void average_kernel(const unsigned short *r, const unsigned short *g,
 void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
   int w = frame->width;
   int h = frame->height;
-  int rays_thread_count = setting.ray_per_pixel / RAY_COERCION_RATE;
+  int rays_thread_count = setting.ray_per_pixel / setting.cuda_coercion_rate;
   int ray_coercion = setting.ray_per_pixel / rays_thread_count;
   unsigned short *r;
   cudaMalloc(&r, sizeof(unsigned short) * w * h * rays_thread_count);
@@ -258,9 +257,11 @@ void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
 int main(int argc, char *argv[]) {
   int ray_count = 10;
   int width = 1200;
-  if (argc == 3) {
+  int coersion_rate = 3;
+  if (argc == 4) {
     width = atoi(argv[1]);
     ray_count = atoi(argv[2]);
+    coersion_rate = atoi(argv[3]);
     if (width <= 0) {
       printf("Please provide a valid positive integer for width.\n");
       return 1;
@@ -269,12 +270,17 @@ int main(int argc, char *argv[]) {
       printf("Please provide a valid positive integer for ray_per_pixel.\n");
       return 1;
     }
+    if (coersion_rate <= 0) {
+      printf("Please provide a valid positive integer for coersion_rate.\n");
+      return 1;
+    }
   }
 
   int height = width * 9 / 16;
   PipelineSetting setting = {.width = width,
                              .height = height,
                              .ray_per_pixel = ray_count,
+                             .cuda_coercion_rate = coersion_rate,
                              .debug = 1,
                              .save = 1,
                              .out_file = (char *)"test_cu.bmp"};
