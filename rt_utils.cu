@@ -41,8 +41,8 @@ Scene *sample_scene_cuda() {
       //          .emission_color = {.a = 0.863, .b = 0.949, .c = 0.961},
       //          .emission_strength = 300,
       //      }},
-      {.pos = {.a = -75, .b = 75, .c = 200},
-       .radius = 100,
+      {.pos = {.a = -75, .b = 25, .c = 200},
+       .radius = 50,
        .material =
            {
                .color = {.a = 0.05, .b = 0.05, .c = 0.05},
@@ -77,6 +77,11 @@ Scene *sample_scene_cuda() {
        .radius = 0.2,
        .material = {.color = {.a = 1, .b = 0.05, .c = 0.05},
                     .emission_color = {.a = 1, .b = 0.2, .c = 0.2},
+                    .emission_strength = 50}},
+      {.pos = {.a = 400, .b = 200, .c = 800},
+       .radius = 100,
+       .material = {.color = {.a = 1, .b = 1, .c = 1},
+                    .emission_color = {.a = 1, .b = 1, .c = 0.2},
                     .emission_strength = 50}},
   };
   int count = sizeof(objects) / sizeof(objects[0]);

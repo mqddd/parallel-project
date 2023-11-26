@@ -62,8 +62,8 @@ __device__ __forceinline__ void trace_ray(Vec3 *origin, Vec3 *direction,
   int hit_index, reflect_count, prev_hit_index = -1;
   Vec3 r_o, r_d, emitted_light;
 
-  Vec3 sky_color, sky_emitted_light;
-  float sky_emitted_light_strength = 0.15;
+  Vec3 sky_emitted_light;
+  float sky_emitted_light_strength = 0.6;
 
   for (int i = 0; i < ray_count; i++) {
     ray_color = {.x = 1, .y = 1, .z = 1};
@@ -72,8 +72,8 @@ __device__ __forceinline__ void trace_ray(Vec3 *origin, Vec3 *direction,
     copy_v(&r_d, direction);
     prev_hit_index = -1;
     move_point_randomly_in_circle(&r_o, seed, DIAFRAGM / 2);
-    // r_d.x += my_drand(seed) * 0.005 - 0.0025;
-    // r_d.y += my_drand(seed) * 0.005 - 0.0025;
+    r_d.x += my_drand(seed) * 0.004 - 0.002;
+    r_d.y += my_drand(seed) * 0.004 - 0.002;
     normalize_v(&r_d);
     while (reflect_count < RAY_BOUNCE_LIMIT) {
       if (find_closest_hit(&r_o, &r_d, objects, object_count, prev_hit_index,
@@ -88,39 +88,27 @@ __device__ __forceinline__ void trace_ray(Vec3 *origin, Vec3 *direction,
                                        1.0 - obj->material.specular_rate);
         normalize_v(&r_d);
 
-        emitted_light.x = obj->material.emission_color.a;
-        emitted_light.y = obj->material.emission_color.b;
-        emitted_light.z = obj->material.emission_color.c;
-        mult_v(&emitted_light, obj->material.emission_strength);
+        emitted_light.x = obj->material.emission_color.a *
+                          obj->material.emission_strength * ray_color.x;
+        emitted_light.y = obj->material.emission_color.b *
+                          obj->material.emission_strength * ray_color.y;
+        emitted_light.z = obj->material.emission_color.c *
+                          obj->material.emission_strength * ray_color.z;
 
-        mult_v(&emitted_light, &ray_color);
         add_v(ray_energy, &emitted_light);
 
         ray_color.x *= obj->material.color.a;
         ray_color.y *= obj->material.color.b;
         ray_color.z *= obj->material.color.c;
-        // float max_c = max(ray_color.x, max(ray_color.y, ray_color.z));
-        // if (max_c > 1) {
-        //   ray_color.x /= max_c;
-        //   ray_color.y /= max_c;
-        //   ray_color.z /= max_c;
-        // }
       } else {
-        sky_color.x = (r_d.y + 0.1) * 0.1;
-        sky_color.y = (r_d.y + 0.1) * 0.5;
-        sky_color.z = (r_d.y + 0.1);
-        // float max_c = max(ray_energy->x, max(ray_energy->y, ray_energy->z));
-        // mult_v(&sky_color, 10);
-        mult_v(&sky_color, 0.01);
-        sky_emitted_light.x = sky_emitted_light_strength;
-        sky_emitted_light.y = sky_emitted_light_strength;
-        sky_emitted_light.z = sky_emitted_light_strength;
+        sky_emitted_light.x =
+            ((r_d.y + 0.1) * 0.1) * sky_emitted_light_strength * ray_color.x;
+        sky_emitted_light.y =
+            ((r_d.y + 0.1) * 0.5) * sky_emitted_light_strength * ray_color.y;
+        sky_emitted_light.z =
+            ((r_d.y + 0.1) * 0.9) * sky_emitted_light_strength * ray_color.z;
 
-        mult_v(&sky_emitted_light, &sky_color);
-
-        mult_v(&sky_emitted_light, &ray_color);
         add_v(ray_energy, &sky_emitted_light);
-
         break;
       }
     }
@@ -129,12 +117,6 @@ __device__ __forceinline__ void trace_ray(Vec3 *origin, Vec3 *direction,
   ray_energy->x /= ray_count;
   ray_energy->y /= ray_count;
   ray_energy->z /= ray_count;
-  // float max_e = max(ray_energy->x, max(ray_energy->y, ray_energy->z));
-  // if (max_e > 1) {
-  //   ray_energy->x /= max_e;
-  //   ray_energy->y /= max_e;
-  //   ray_energy->z /= max_e;
-  // }
 }
 
 __global__ void test_kernel(const Object *objects, const int count,
@@ -175,9 +157,9 @@ __global__ void average_kernel(const unsigned short *r, const unsigned short *g,
     return;
   int index = x_p + y_p * w;
 
-  int rp = 0;
-  int gp = 0;
-  int bp = 0;
+  float rp = 0;
+  float gp = 0;
+  float bp = 0;
   for (int i = 0; i < rays; i++) {
     int in_index = (x_p * rays) + i + y_p * (w * rays);
     rp += r[in_index];
@@ -185,9 +167,20 @@ __global__ void average_kernel(const unsigned short *r, const unsigned short *g,
     bp += b[in_index];
   }
 
-  r_out[index] = (rp / rays) > 255 ? 255 : (rp / rays);
-  g_out[index] = (gp / rays) > 255 ? 255 : (gp / rays);
-  b_out[index] = (bp / rays) > 255 ? 255 : (bp / rays);
+  rp = rp / rays;
+  gp = gp / rays;
+  bp = bp / rays;
+
+  float max_e = max(rp, max(gp, bp));
+  if (max_e > 255) {
+    rp = (rp / max_e) * 255 * 1.5;
+    gp = (gp / max_e) * 255 * 1.5;
+    bp = (bp / max_e) * 255 * 1.5;
+  }
+
+  r_out[index] = (rp) > 255 ? 255 : (rp);
+  g_out[index] = (gp) > 255 ? 255 : (gp);
+  b_out[index] = (bp) > 255 ? 255 : (bp);
 }
 
 void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
