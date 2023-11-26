@@ -54,7 +54,8 @@ Scene *sample_scene_cuda() {
        .material = {.color = {.a = 0.4, .b = 0.4, .c = 0.4}}},
       {.pos = {.a = -3, .b = 1, .c = 20},
        .radius = 1,
-       .material = {.color = {.a = 1, .b = 0.05, .c = 0.05}}},
+       .material = {.color = {.a = 1, .b = 0.05, .c = 0.05},
+                    .specular_rate = 0.9}},
       {.pos = {.a = 0, .b = 5, .c = 40},
        .radius = 10,
        .material = {.color = {.a = 0.9, .b = 0.9, .c = 1}, .specular_rate = 1}},
@@ -175,6 +176,14 @@ __device__ __forceinline__ void random_direction_hemi_and_lerp(Vec3 *target,
   target->x = target->x * (1.0 - lerp) + (rx * lerp);
   target->y = target->y * (1.0 - lerp) + (ry * lerp);
   target->z = target->z * (1.0 - lerp) + (rz * lerp);
+}
+
+__device__ __forceinline__ void
+move_point_randomly_in_circle(Vec3 *target, unsigned *seed, float radius) {
+  float theta = 2 * 3.1415926 * my_drand(seed);
+  float rho = sqrt(my_drand(seed)) * radius;
+  target->x += rho * cos(theta);
+  target->y += rho * sin(theta);
 }
 
 __device__ __forceinline__ float lerp(float a, float b, float f) {

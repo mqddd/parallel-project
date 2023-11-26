@@ -32,12 +32,12 @@ inline void gpuAssert(cudaError_t code, const char *file, int line,
   cudaEventSynchronize(stop);                                                  \
   cudaEventElapsedTime(&time, start, stop);
 
-#define VP_W 4.0f
+#define VP_W 0.7f
 #define VP_H VP_W * 9 / 16
 #define DIAFRAGM 0.01f
-#define FOCAL 6.0f
-#define RAY_COERCION 1
+#define FOCAL 10
 #define RAY_BOUNCE_LIMIT 10
+#define RAY_COERCION 100
 
 __device__ __forceinline__ void pixel_ray(float x, float y, Vec3 *origin,
                                           Vec3 *direction) {
@@ -72,8 +72,9 @@ __device__ __forceinline__ void trace_ray(Vec3 *origin, Vec3 *direction,
     copy_v(&r_o, origin);
     copy_v(&r_d, direction);
     prev_hit_index = -1;
-    r_o.x += my_drand(seed) * DIAFRAGM - DIAFRAGM / 2;
-    r_o.y += my_drand(seed) * DIAFRAGM - DIAFRAGM / 2;
+    move_point_randomly_in_circle(&r_o, seed, DIAFRAGM / 2);
+    // r_d.x += my_drand(seed) * 0.005 - 0.0025;
+    // r_d.y += my_drand(seed) * 0.005 - 0.0025;
     normalize_v(&r_d);
     while (reflect_count < RAY_BOUNCE_LIMIT) {
       if (find_closest_hit(&r_o, &r_d, objects, object_count, prev_hit_index,
@@ -95,24 +96,23 @@ __device__ __forceinline__ void trace_ray(Vec3 *origin, Vec3 *direction,
 
         mult_v(&emitted_light, &ray_color);
         add_v(ray_energy, &emitted_light);
-        float max_e = max(ray_energy->x, max(ray_energy->y, ray_energy->z));
 
         ray_color.x *= obj->material.color.a;
         ray_color.y *= obj->material.color.b;
         ray_color.z *= obj->material.color.c;
-        float max_c = max(ray_color.x, max(ray_color.y, ray_color.z));
-        if (max_c > 1) {
-          ray_color.x /= max_c;
-          ray_color.y /= max_c;
-          ray_color.z /= max_c;
-        }
+        // float max_c = max(ray_color.x, max(ray_color.y, ray_color.z));
+        // if (max_c > 1) {
+        //   ray_color.x /= max_c;
+        //   ray_color.y /= max_c;
+        //   ray_color.z /= max_c;
+        // }
       } else {
         sky_color.x = (r_d.y + 0.1) * 0.1;
         sky_color.y = (r_d.y + 0.1) * 0.5;
         sky_color.z = (r_d.y + 0.1);
         // float max_c = max(ray_energy->x, max(ray_energy->y, ray_energy->z));
         // mult_v(&sky_color, 10);
-        mult_v(&sky_color, 5);
+        mult_v(&sky_color, 0.01);
         sky_emitted_light.x = sky_emitted_light_strength;
         sky_emitted_light.y = sky_emitted_light_strength;
         sky_emitted_light.z = sky_emitted_light_strength;
@@ -121,7 +121,6 @@ __device__ __forceinline__ void trace_ray(Vec3 *origin, Vec3 *direction,
 
         mult_v(&sky_emitted_light, &ray_color);
         add_v(ray_energy, &sky_emitted_light);
-        float max_e = max(ray_energy->x, max(ray_energy->y, ray_energy->z));
 
         break;
       }
@@ -150,8 +149,8 @@ __global__ void test_kernel(const Object *objects, const int count, UCHAR *r,
   int index = blockDim.x * blockIdx.x + threadIdx.x + y_p * (w * rays);
   unsigned int seed = index + 10;
 
-  float x = ((x_p - w / 2.0) / w) * VP_W * 2,
-        y = -((y_p - h / 2.0) / h) * VP_H * 2;
+  float x = ((x_p - w / 2.0) / w) * VP_W * FOCAL * 2,
+        y = -((y_p - h / 2.0) / h) * VP_H * FOCAL * 2;
 
   Vec3 r_origin;
   Vec3 r_dir;
