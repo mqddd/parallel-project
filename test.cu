@@ -24,7 +24,8 @@ inline void gpuAssert(cudaError_t code, const char *file, int line,
 #define FOCAL 6.0f
 #define R_COUNT 5
 
-__device__ void pixel_ray(double x, double y, Vec3 *origin, Vec3 *direction) {
+__device__ __forceinline__ void pixel_ray(double x, double y, Vec3 *origin,
+                                          Vec3 *direction) {
   origin->x = 0;
   origin->y = 4.0f;
   origin->z = 0;
@@ -32,14 +33,15 @@ __device__ void pixel_ray(double x, double y, Vec3 *origin, Vec3 *direction) {
   direction->x = x;
   direction->y = y;
   direction->z = FOCAL;
-  divide_v(direction, len_v(direction));
+  // divide_v(direction, len_v(direction));
   rotateDirection(direction, 7, 0, 0);
   normalize_v(direction);
 }
 
-__device__ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
-                          const Object *objects, int object_count,
-                          Vec3 *ray_energy, unsigned *seed) {
+__device__ __forceinline__ void trace_ray(Vec3 *origin, Vec3 *direction,
+                                          int ray_count, const Object *objects,
+                                          int object_count, Vec3 *ray_energy,
+                                          unsigned *seed) {
   Vec3 ray_color = {.x = 1, .y = 1, .z = 1};
 
   Vec3 intersection, normal;
