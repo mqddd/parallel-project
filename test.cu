@@ -37,7 +37,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line,
 #define DIAFRAGM 0.01f
 #define FOCAL 10
 #define RAY_BOUNCE_LIMIT 10
-#define RAY_COERCION 100
+#define RAY_COERCION_RATE 3
 
 __device__ __forceinline__ void pixel_ray(float x, float y, Vec3 *origin,
                                           Vec3 *direction) {
@@ -138,9 +138,10 @@ __device__ __forceinline__ void trace_ray(Vec3 *origin, Vec3 *direction,
   // }
 }
 
-__global__ void test_kernel(const Object *objects, const int count, UCHAR *r,
-                            UCHAR *g, UCHAR *b, const int w, const int h,
-                            const int rays) {
+__global__ void test_kernel(const Object *objects, const int count,
+                            unsigned short *r, unsigned short *g,
+                            unsigned short *b, const int w, const int h,
+                            const int rays, const int ray_coercion) {
   int x_p = (blockDim.x * blockIdx.x + threadIdx.x) / rays;
   int y_p = blockDim.y * blockIdx.y + threadIdx.y;
 
@@ -157,17 +158,18 @@ __global__ void test_kernel(const Object *objects, const int count, UCHAR *r,
   pixel_ray(x, y, &r_origin, &r_dir);
 
   Vec3 ray_energy = {.x = 0, .y = 0, .z = 0};
-  trace_ray(&r_origin, &r_dir, RAY_COERCION, objects, count, &ray_energy,
+  trace_ray(&r_origin, &r_dir, ray_coercion, objects, count, &ray_energy,
             &seed);
 
-  r[index] = (ray_energy.x > 1 ? 1 : ray_energy.x) * 255.0;
-  g[index] = (ray_energy.y > 1 ? 1 : ray_energy.y) * 255.0;
-  b[index] = (ray_energy.z > 1 ? 1 : ray_energy.z) * 255.0;
+  r[index] = ray_energy.x * 255.0;
+  g[index] = ray_energy.y * 255.0;
+  b[index] = ray_energy.z * 255.0;
 }
 
-__global__ void average_kernel(const UCHAR *r, const UCHAR *g, const UCHAR *b,
-                               UCHAR *r_out, UCHAR *g_out, UCHAR *b_out, int w,
-                               int h, int rays) {
+__global__ void average_kernel(const unsigned short *r, const unsigned short *g,
+                               const unsigned short *b, UCHAR *r_out,
+                               UCHAR *g_out, UCHAR *b_out, int w, int h,
+                               int rays) {
   int x_p = blockDim.x * blockIdx.x + threadIdx.x;
   int y_p = blockDim.y * blockIdx.y + threadIdx.y;
   if (x_p >= w || y_p >= h)
@@ -184,21 +186,22 @@ __global__ void average_kernel(const UCHAR *r, const UCHAR *g, const UCHAR *b,
     bp += b[in_index];
   }
 
-  r_out[index] = rp / rays;
-  g_out[index] = gp / rays;
-  b_out[index] = bp / rays;
+  r_out[index] = (rp / rays) > 255 ? 255 : (rp / rays);
+  g_out[index] = (gp / rays) > 255 ? 255 : (gp / rays);
+  b_out[index] = (bp / rays) > 255 ? 255 : (bp / rays);
 }
 
 void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
   int w = frame->width;
   int h = frame->height;
-  int rays_thread_count = setting.ray_per_pixel / RAY_COERCION;
-  UCHAR *r;
-  cudaMalloc(&r, sizeof(UCHAR) * w * h * rays_thread_count);
-  UCHAR *g;
-  cudaMalloc(&g, sizeof(UCHAR) * w * h * rays_thread_count);
-  UCHAR *b;
-  cudaMalloc(&b, sizeof(UCHAR) * w * h * rays_thread_count);
+  int rays_thread_count = setting.ray_per_pixel / RAY_COERCION_RATE;
+  int ray_coercion = setting.ray_per_pixel / rays_thread_count;
+  unsigned short *r;
+  cudaMalloc(&r, sizeof(unsigned short) * w * h * rays_thread_count);
+  unsigned short *g;
+  cudaMalloc(&g, sizeof(unsigned short) * w * h * rays_thread_count);
+  unsigned short *b;
+  cudaMalloc(&b, sizeof(unsigned short) * w * h * rays_thread_count);
 
   UCHAR *r_out;
   cudaMalloc(&r_out, sizeof(UCHAR) * w * h);
@@ -219,15 +222,18 @@ void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
 
   printf("Width: %d, Height: %d, Rays per pixel: %d\n", w, h,
          setting.ray_per_pixel);
-  printf("Grid width: %d, Grid height: %d, Ray thread: %d\n", bld.x, bld.y,
-         rays_thread_count);
+  printf("Grid width: %d, Grid height: %d, Total thread count: %d\n", bld.x,
+         bld.y, w * h * rays_thread_count);
+  printf("Total ray per pixel: %d, Thread for each ray: %d, Rays per thread: "
+         "%d\n",
+         rays_thread_count * ray_coercion, rays_thread_count, ray_coercion);
 
   float time;
   cudaEvent_t start, stop;
   cudaStartTimer(start, stop);
 
   test_kernel<<<bld, thd>>>(d_objects, scene->count, r, g, b, w, h,
-                            rays_thread_count);
+                            rays_thread_count, ray_coercion);
   cudaCheckForErrorAndSync();
   cudaStopTimerAndRecord(start, stop, time);
   printf("GPU kernel took %.4f ms \n\n", time);
