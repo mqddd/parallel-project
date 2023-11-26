@@ -4,6 +4,7 @@
 typedef struct PipelineSetting {
   int width;
   int height;
+  int ray_per_pixel;
   int debug;
   int save;
   char *out_file;

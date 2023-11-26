@@ -18,11 +18,25 @@ inline void gpuAssert(cudaError_t code, const char *file, int line,
   }
 }
 
+#define cudaCheckForErrorAndSync()                                             \
+  gpuErrchk(cudaPeekAtLastError());                                            \
+  gpuErrchk(cudaDeviceSynchronize());
+
+#define cudaStartTimer(start, stop)                                            \
+  cudaEventCreate(&start);                                                     \
+  cudaEventCreate(&stop);                                                      \
+  cudaEventRecord(start, 0);
+
+#define cudaStopTimerAndRecord(start, stop, time)                              \
+  cudaEventRecord(stop, 0);                                                    \
+  cudaEventSynchronize(stop);                                                  \
+  cudaEventElapsedTime(&time, start, stop);
+
 #define VP_W 4.0f
 #define VP_H VP_W * 9 / 16
 #define DIAFRAGM 0.01f
 #define FOCAL 6.0f
-#define R_COUNT 5
+#define RAY_COERCION 5
 
 __device__ __forceinline__ void pixel_ray(double x, double y, Vec3 *origin,
                                           Vec3 *direction) {
@@ -143,7 +157,8 @@ __global__ void test_kernel(const Object *objects, const int count, UCHAR *r,
   pixel_ray(x, y, &r_origin, &r_dir);
 
   Vec3 ray_energy = {.x = 0, .y = 0, .z = 0};
-  trace_ray(&r_origin, &r_dir, R_COUNT, objects, count, &ray_energy, &seed);
+  trace_ray(&r_origin, &r_dir, RAY_COERCION, objects, count, &ray_energy,
+            &seed);
 
   r[index] = (ray_energy.x > 1 ? 1 : ray_energy.x) * 255.0;
   g[index] = (ray_energy.y > 1 ? 1 : ray_energy.y) * 255.0;
@@ -177,13 +192,13 @@ __global__ void average_kernel(const UCHAR *r, const UCHAR *g, const UCHAR *b,
 void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
   int w = frame->width;
   int h = frame->height;
-  int rays = 5;
+  int rays_thread_count = setting.ray_per_pixel / RAY_COERCION;
   UCHAR *r;
-  cudaMalloc(&r, sizeof(UCHAR) * w * h * rays);
+  cudaMalloc(&r, sizeof(UCHAR) * w * h * rays_thread_count);
   UCHAR *g;
-  cudaMalloc(&g, sizeof(UCHAR) * w * h * rays);
+  cudaMalloc(&g, sizeof(UCHAR) * w * h * rays_thread_count);
   UCHAR *b;
-  cudaMalloc(&b, sizeof(UCHAR) * w * h * rays);
+  cudaMalloc(&b, sizeof(UCHAR) * w * h * rays_thread_count);
 
   UCHAR *r_out;
   cudaMalloc(&r_out, sizeof(UCHAR) * w * h);
@@ -199,35 +214,31 @@ void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
 
   int block_size = 16;
   dim3 thd = dim3(block_size, block_size);
-  dim3 bld = dim3((w * rays - 1) / block_size + 1, (h - 1) / block_size + 1);
-  printf("%d, %d\n", w, h);
-  printf("%d, %d\n", bld.x, bld.y);
+  dim3 bld = dim3((w * rays_thread_count - 1) / block_size + 1,
+                  (h - 1) / block_size + 1);
+
+  printf("Width: %d, Height: %d, Rays per pixel: %d\n", w, h,
+         setting.ray_per_pixel);
+  printf("Grid width: %d, Grid height: %d, Ray thread: %d\n", bld.x, bld.y,
+         rays_thread_count);
 
   float time;
   cudaEvent_t start, stop;
-  cudaEventCreate(&start);
-  cudaEventCreate(&stop);
-  cudaEventRecord(start, 0);
+  cudaStartTimer(start, stop);
 
-  test_kernel<<<bld, thd>>>(d_objects, scene->count, r, g, b, w, h, rays);
-  gpuErrchk(cudaPeekAtLastError());
-  gpuErrchk(cudaDeviceSynchronize());
-  cudaEventRecord(stop, 0);
-  cudaEventSynchronize(stop);
-  cudaEventElapsedTime(&time, start, stop);
+  test_kernel<<<bld, thd>>>(d_objects, scene->count, r, g, b, w, h,
+                            rays_thread_count);
+  cudaCheckForErrorAndSync();
+  cudaStopTimerAndRecord(start, stop, time);
   printf("GPU kernel took %.4f ms \n\n", time);
 
   // ----
-  cudaEventCreate(&start);
-  cudaEventCreate(&stop);
-  cudaEventRecord(start, 0);
+  cudaStartTimer(start, stop);
 
-  average_kernel<<<bld, thd>>>(r, g, b, r_out, g_out, b_out, w, h, rays);
-  gpuErrchk(cudaPeekAtLastError());
-  gpuErrchk(cudaDeviceSynchronize());
-  cudaEventRecord(stop, 0);
-  cudaEventSynchronize(stop);
-  cudaEventElapsedTime(&time, start, stop);
+  average_kernel<<<bld, thd>>>(r, g, b, r_out, g_out, b_out, w, h,
+                               rays_thread_count);
+  cudaCheckForErrorAndSync();
+  cudaStopTimerAndRecord(start, stop, time);
   printf("Average kernel took %.4f ms \n\n", time);
 
   cudaMemcpy(frame->r, r_out, w * h, cudaMemcpyDeviceToHost);
@@ -238,11 +249,26 @@ void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
   cudaFree(b);
 }
 
-int main() {
+int main(int argc, char *argv[]) {
+  int ray_count = 10;
   int width = 1200;
+  if (argc == 3) {
+    width = atoi(argv[1]);
+    ray_count = atoi(argv[2]);
+    if (width <= 0) {
+      printf("Please provide a valid positive integer for width.\n");
+      return 1;
+    }
+    if (ray_count <= 0) {
+      printf("Please provide a valid positive integer for ray_per_pixel.\n");
+      return 1;
+    }
+  }
+
   int height = width * 9 / 16;
   PipelineSetting setting = {.width = width,
                              .height = height,
+                             .ray_per_pixel = ray_count,
                              .debug = 1,
                              .save = 1,
                              .out_file = (char *)"test_cu.bmp"};
