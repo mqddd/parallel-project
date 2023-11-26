@@ -38,8 +38,8 @@ __device__ void pixel_ray(double x, double y, Vec3 *origin, Vec3 *direction) {
 }
 
 __device__ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
-                          Object *objects, int object_count, Vec3 *ray_energy,
-                          unsigned *seed) {
+                          const Object *objects, int object_count,
+                          Vec3 *ray_energy, unsigned *seed) {
   Vec3 ray_color = {.x = 1, .y = 1, .z = 1};
 
   Vec3 intersection, normal;
@@ -62,7 +62,7 @@ __device__ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
       if (find_closest_hit(&r_o, &r_d, objects, object_count, prev_hit_index,
                            &intersection, &normal, &hit_index)) {
         reflect_count++;
-        Object *obj = &objects[hit_index];
+        const Object *obj = &objects[hit_index];
         prev_hit_index = hit_index;
 
         copy_v(&r_o, &intersection);
@@ -90,9 +90,12 @@ __device__ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
           ray_color.z /= max_c;
         }
       } else {
-        sky_color.x = 0.863f;
-        sky_color.y = 0.949f;
-        sky_color.z = 0.961f;
+        sky_color.x = (r_d.y + 0.1) * 0.1;
+        sky_color.y = (r_d.y + 0.1) * 0.5;
+        sky_color.z = (r_d.y + 0.1);
+        // double max_c = max(ray_energy->x, max(ray_energy->y, ray_energy->z));
+        // mult_v(&sky_color, 10);
+        mult_v(&sky_color, 5);
         sky_emitted_light.x = sky_emitted_light_strength;
         sky_emitted_light.y = sky_emitted_light_strength;
         sky_emitted_light.z = sky_emitted_light_strength;
@@ -111,16 +114,17 @@ __device__ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
   ray_energy->x /= ray_count;
   ray_energy->y /= ray_count;
   ray_energy->z /= ray_count;
-  float max_e = max(ray_energy->x, max(ray_energy->y, ray_energy->z));
-  if (max_e > 1) {
-    ray_energy->x /= max_e;
-    ray_energy->y /= max_e;
-    ray_energy->z /= max_e;
-  }
+  // float max_e = max(ray_energy->x, max(ray_energy->y, ray_energy->z));
+  // if (max_e > 1) {
+  //   ray_energy->x /= max_e;
+  //   ray_energy->y /= max_e;
+  //   ray_energy->z /= max_e;
+  // }
 }
 
-__global__ void test_kernel(Object *objects, int count, UCHAR *r, UCHAR *g,
-                            UCHAR *b, int w, int h, int rays) {
+__global__ void test_kernel(const Object *objects, const int count, UCHAR *r,
+                            UCHAR *g, UCHAR *b, const int w, const int h,
+                            const int rays) {
   int x_p = (blockDim.x * blockIdx.x + threadIdx.x) / rays;
   int y_p = blockDim.y * blockIdx.y + threadIdx.y;
 
@@ -144,9 +148,9 @@ __global__ void test_kernel(Object *objects, int count, UCHAR *r, UCHAR *g,
   b[index] = (ray_energy.z > 1 ? 1 : ray_energy.z) * 255.0;
 }
 
-__global__ void average_kernel(UCHAR *r, UCHAR *g, UCHAR *b, UCHAR *r_out,
-                               UCHAR *g_out, UCHAR *b_out, int w, int h,
-                               int rays) {
+__global__ void average_kernel(const UCHAR *r, const UCHAR *g, const UCHAR *b,
+                               UCHAR *r_out, UCHAR *g_out, UCHAR *b_out, int w,
+                               int h, int rays) {
   int x_p = blockDim.x * blockIdx.x + threadIdx.x;
   int y_p = blockDim.y * blockIdx.y + threadIdx.y;
   if (x_p >= w || y_p >= h)

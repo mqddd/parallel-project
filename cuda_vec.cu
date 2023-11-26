@@ -11,7 +11,7 @@ __device__ void add_v(Vec3 *vec, Vec3 *target) {
   vec->y += target->y;
   vec->z += target->z;
 }
-__device__ void add_v(Vec3 *vec, int v) {
+__device__ void add_v(Vec3 *vec, double v) {
   vec->x += v;
   vec->y += v;
   vec->z += v;
@@ -21,7 +21,7 @@ __device__ void sub_v(Vec3 *vec, Vec3 *target) {
   vec->y -= target->y;
   vec->z -= target->z;
 }
-__device__ void sub_v(Vec3 *vec, int v) {
+__device__ void sub_v(Vec3 *vec, double v) {
   vec->x -= v;
   vec->y -= v;
   vec->z -= v;
@@ -31,12 +31,12 @@ __device__ void mult_v(Vec3 *vec, Vec3 *target) {
   vec->y *= target->y;
   vec->z *= target->z;
 }
-__device__ void mult_v(Vec3 *vec, int v) {
+__device__ void mult_v(Vec3 *vec, double v) {
   vec->x *= v;
   vec->y *= v;
   vec->z *= v;
 }
-__device__ void divide_v(Vec3 *vec, int v) {
+__device__ void divide_v(Vec3 *vec, double v) {
   vec->x /= v;
   vec->y /= v;
   vec->z /= v;

@@ -16,12 +16,20 @@ __device__ unsigned my_rand(unsigned *seed_p) {
 
 Scene *sample_scene_cuda() {
   Object objects[] = {
+      // {.pos = {.a = 150, .b = 50, .c = 300},
+      //  .radius = 100,
+      //  .material =
+      //      {
+      //          .color = {.a = 1, .b = 1, .c = 0.05},
+      //          .emission_color = {.a = 0.863, .b = 0.949, .c = 0.961},
+      //          .emission_strength = 300,
+      //      }},
       {.pos = {.a = -75, .b = 75, .c = 200},
        .radius = 100,
        .material =
            {
                .color = {.a = 0.05, .b = 0.05, .c = 0.05},
-               .emission_color = {.a = 1, .b = 1, .c = 1},
+               .emission_color = {.a = 1, .b = 1, .c = 0.6},
                .emission_strength = 3,
            }},
       {.pos = {.a = 0, .b = -1000, .c = 50},
@@ -35,22 +43,22 @@ Scene *sample_scene_cuda() {
        .material = {.color = {.a = 0.9, .b = 0.9, .c = 1}, .specular_rate = 1}},
       {.pos = {.a = 3, .b = 1, .c = 20},
        .radius = 1,
-       .material = {.color = {.a = 0, .b = 0, .c = 1},
+       .material = {.color = {.a = 1, .b = 0, .c = 0},
                     .emission_color = {.a = 0.1, .b = 0.1, .c = 1},
-                    .emission_strength = 1}},
+                    .emission_strength = 10}},
       {.pos = {.a = 10, .b = 1, .c = 30},
        .radius = 1,
-       .material = {.color = {.a = 0.4, .b = 0.4, .c = 0.8}}},
+       .material = {.color = {.a = 0.7, .b = 0.7, .c = 1}}},
       {.pos = {.a = 2, .b = 10, .c = 20},
        .radius = 4,
        .material = {.color = {.a = 1, .b = 0.8, .c = 1}, .specular_rate = 1}},
       {.pos = {.a = 10, .b = 5, .c = 30},
        .radius = 1,
-       .material = {.color = {.a = 0.05, .b = 0.4, .c = 0.4}}},
+       .material = {.color = {.a = 0.05, .b = 0.8, .c = 0.8}}},
       {.pos = {.a = 10, .b = 1, .c = 25},
        .radius = 0.2,
        .material = {.color = {.a = 1, .b = 0.05, .c = 0.05},
-                    .emission_color = {.a = 1, .b = 1, .c = 1},
+                    .emission_color = {.a = 1, .b = 0.2, .c = 0.2},
                     .emission_strength = 50}},
   };
   int count = sizeof(objects) / sizeof(objects[0]);
@@ -64,7 +72,7 @@ __device__ double my_drand(unsigned *seed_p) {
   return y * 0.99 + 0.01;
 }
 
-__device__ int ray_intersect(Vec3 *o, Vec3 *d, Object *object,
+__device__ int ray_intersect(Vec3 *o, Vec3 *d, const Object *object,
                              Vec3 *intersection, Vec3 *normal, double *dst) {
   Vec3 oc;
   oc.x = o->x - object->pos.a;
@@ -97,9 +105,10 @@ __device__ int ray_intersect(Vec3 *o, Vec3 *d, Object *object,
 
   return 0;
 }
-__device__ int find_closest_hit(Vec3 *o, Vec3 *d, Object *objects, int count,
-                                int last_hit_index, Vec3 *intersection,
-                                Vec3 *normal, int *clostest_object_index) {
+__device__ int find_closest_hit(Vec3 *o, Vec3 *d, const Object *objects,
+                                int count, int last_hit_index,
+                                Vec3 *intersection, Vec3 *normal,
+                                int *clostest_object_index) {
   double best_dst = 9999999;
   Vec3 best_inter, best_normal;
   for (int i = 0; i < count; i++) {
