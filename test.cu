@@ -36,9 +36,10 @@ inline void gpuAssert(cudaError_t code, const char *file, int line,
 #define VP_H VP_W * 9 / 16
 #define DIAFRAGM 0.01f
 #define FOCAL 6.0f
-#define RAY_COERCION 5
+#define RAY_COERCION 1
+#define RAY_BOUNCE_LIMIT 10
 
-__device__ __forceinline__ void pixel_ray(double x, double y, Vec3 *origin,
+__device__ __forceinline__ void pixel_ray(float x, float y, Vec3 *origin,
                                           Vec3 *direction) {
   origin->x = 0;
   origin->y = 4.0f;
@@ -74,7 +75,7 @@ __device__ __forceinline__ void trace_ray(Vec3 *origin, Vec3 *direction,
     r_o.x += my_drand(seed) * DIAFRAGM - DIAFRAGM / 2;
     r_o.y += my_drand(seed) * DIAFRAGM - DIAFRAGM / 2;
     normalize_v(&r_d);
-    while (reflect_count < 15) {
+    while (reflect_count < RAY_BOUNCE_LIMIT) {
       if (find_closest_hit(&r_o, &r_d, objects, object_count, prev_hit_index,
                            &intersection, &normal, &hit_index)) {
         reflect_count++;
@@ -109,7 +110,7 @@ __device__ __forceinline__ void trace_ray(Vec3 *origin, Vec3 *direction,
         sky_color.x = (r_d.y + 0.1) * 0.1;
         sky_color.y = (r_d.y + 0.1) * 0.5;
         sky_color.z = (r_d.y + 0.1);
-        // double max_c = max(ray_energy->x, max(ray_energy->y, ray_energy->z));
+        // float max_c = max(ray_energy->x, max(ray_energy->y, ray_energy->z));
         // mult_v(&sky_color, 10);
         mult_v(&sky_color, 5);
         sky_emitted_light.x = sky_emitted_light_strength;
@@ -149,8 +150,8 @@ __global__ void test_kernel(const Object *objects, const int count, UCHAR *r,
   int index = blockDim.x * blockIdx.x + threadIdx.x + y_p * (w * rays);
   unsigned int seed = index + 10;
 
-  double x = ((x_p - w / 2.0) / w) * VP_W * 2,
-         y = -((y_p - h / 2.0) / h) * VP_H * 2;
+  float x = ((x_p - w / 2.0) / w) * VP_W * 2,
+        y = -((y_p - h / 2.0) / h) * VP_H * 2;
 
   Vec3 r_origin;
   Vec3 r_dir;

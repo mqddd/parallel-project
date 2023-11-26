@@ -5,7 +5,7 @@ extern "C" {
 
 // #define MR_MULTIPLIER 279470273
 // #define MR_MODULUS 4294967291U
-// #define MR_DIVISOR ((double)4294967291U)
+// #define MR_DIVISOR ((float)4294967291U)
 // __device__ __forceinline__ unsigned my_rand(unsigned *seed_p) {
 //   long long z = *seed_p;
 //   z *= MR_MULTIPLIER;
@@ -14,9 +14,9 @@ extern "C" {
 //   return *seed_p;
 // }
 
-// __device__ __forceinline__ double my_drand(unsigned *seed_p) {
+// __device__ __forceinline__ float my_drand(unsigned *seed_p) {
 //   unsigned x = my_rand(seed_p);
-//   double y = x / MR_DIVISOR;
+//   float y = x / MR_DIVISOR;
 //   return y * 0.99 + 0.01;
 // }
 
@@ -27,7 +27,7 @@ __device__ __forceinline__ unsigned my_rand(unsigned *seed_p) {
   return result;
 }
 
-__device__ __forceinline__ double my_drand(unsigned *seed_p) {
+__device__ __forceinline__ float my_drand(unsigned *seed_p) {
   return my_rand(seed_p) / 4294967295.0;
 }
 
@@ -86,21 +86,21 @@ Scene *sample_scene_cuda() {
 __device__ __forceinline__ int ray_intersect(Vec3 *o, Vec3 *d,
                                              const Object *object,
                                              Vec3 *intersection, Vec3 *normal,
-                                             double *dst) {
+                                             float *dst) {
   Vec3 oc;
   oc.x = o->x - object->pos.a;
   oc.y = o->y - object->pos.b;
   oc.z = o->z - object->pos.c;
 
-  double a = dot_v(d, d);
-  double b = 2.0 * dot_v(&oc, d);
-  double c = dot_v(&oc, &oc) - object->radius * object->radius;
-  double discriminant = b * b - 4 * a * c;
+  float a = dot_v(d, d);
+  float b = 2.0 * dot_v(&oc, d);
+  float c = dot_v(&oc, &oc) - object->radius * object->radius;
+  float discriminant = b * b - 4 * a * c;
 
   if (discriminant < 0 || b > 0) {
     return 0;
   } else {
-    double sqrt_discr = sqrt(discriminant);
+    float sqrt_discr = sqrt(discriminant);
     *dst = (-b - sqrt_discr) / (2 * a);
     if (*dst > 0) {
 
@@ -122,7 +122,7 @@ __device__ __forceinline__ int
 find_closest_hit(Vec3 *o, Vec3 *d, const Object *objects, int count,
                  int last_hit_index, Vec3 *intersection, Vec3 *normal,
                  int *clostest_object_index) {
-  double current_dst, best_dst = 9999999;
+  float current_dst, best_dst = 9999999;
   Vec3 current_intersection, current_normal;
   for (int i = 0; i < count; i++) {
     if (last_hit_index == i)
@@ -145,24 +145,26 @@ find_closest_hit(Vec3 *o, Vec3 *d, const Object *objects, int count,
 __device__ __forceinline__ float random_normal(unsigned *seed) {
   float theta = 2 * 3.1415926 * my_drand(seed);
   float rho = sqrt(-2 * log(my_drand(seed)));
+  // float rho = 1;
   return rho * cos(theta);
 }
-__device__ __forceinline__ void random_direction(Vec3 *target, unsigned *seed) {
-  target->x = random_normal(seed);
-  target->y = random_normal(seed);
-  target->z = random_normal(seed);
-  normalize_v(target);
-}
-__device__ __forceinline__ void
-random_direction_hemi(Vec3 *target, Vec3 *normal, unsigned *seed) {
-  random_direction(target, seed);
-  if (dot_v(normal, target) < 0)
-    mult_v(target, -1);
-}
+// __device__ __forceinline__ void random_direction(Vec3 *target, unsigned
+// *seed) {
+//   target->x = random_normal(seed);
+//   target->y = random_normal(seed);
+//   target->z = random_normal(seed);
+//   normalize_v(target);
+// }
+// __device__ __forceinline__ void
+// random_direction_hemi(Vec3 *target, Vec3 *normal, unsigned *seed) {
+//   random_direction(target, seed);
+//   if (dot_v(normal, target) < 0)
+//     mult_v(target, -1);
+// }
 __device__ __forceinline__ void random_direction_hemi_and_lerp(Vec3 *target,
                                                                Vec3 *normal,
                                                                unsigned *seed,
-                                                               double lerp) {
+                                                               float lerp) {
   float rx = random_normal(seed) + normal->x;
   float ry = random_normal(seed) + normal->y;
   float rz = random_normal(seed) + normal->z;
@@ -175,6 +177,6 @@ __device__ __forceinline__ void random_direction_hemi_and_lerp(Vec3 *target,
   target->z = target->z * (1.0 - lerp) + (rz * lerp);
 }
 
-__device__ __forceinline__ double lerp(double a, double b, double f) {
+__device__ __forceinline__ float lerp(float a, float b, float f) {
   return a * (1.0 - f) + (b * f);
 }
