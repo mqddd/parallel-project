@@ -34,7 +34,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line,
 
 #define VP_W 0.7f
 #define VP_H VP_W * 9 / 16
-#define DIAFRAGM 0.01f
+#define DIAFRAGM 0.002f
 #define FOCAL 10
 #define RAY_BOUNCE_LIMIT 10
 
@@ -72,8 +72,8 @@ __device__ __forceinline__ void trace_ray(Vec3 *origin, Vec3 *direction,
     copy_v(&r_d, direction);
     prev_hit_index = -1;
     move_point_randomly_in_circle(&r_o, seed, DIAFRAGM / 2);
-    r_d.x += my_drand(seed) * 0.004 - 0.002;
-    r_d.y += my_drand(seed) * 0.004 - 0.002;
+    r_d.x += my_drand(seed) * 0.001 - 0.0005;
+    r_d.y += my_drand(seed) * 0.001 - 0.0005;
     normalize_v(&r_d);
     while (reflect_count < RAY_BOUNCE_LIMIT) {
       if (find_closest_hit(&r_o, &r_d, objects, object_count, prev_hit_index,
