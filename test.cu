@@ -91,7 +91,7 @@ __device__ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
         }
       } else {
         sky_color.x = (r_d.y + 0.1) * 0.1;
-        sky_color.y = (r_d.y + 0.9) * 0.5;
+        sky_color.y = (r_d.y + 0.1) * 0.5;
         sky_color.z = (r_d.y + 0.1);
         // double max_c = max(ray_energy->x, max(ray_energy->y, ray_energy->z));
         // mult_v(&sky_color, 10);
