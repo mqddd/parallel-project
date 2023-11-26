@@ -1,6 +1,8 @@
+#ifndef PIPELINE_H
+#define PIPELINE_H 
+
 #include "frame.h"
 #include "scene.h"
-
 typedef struct PipelineSetting {
   int width;
   int height;
@@ -12,3 +14,5 @@ typedef struct PipelineSetting {
 typedef void (*Renderer)(Scene *, Frame *, PipelineSetting);
 
 void pipeline(Scene *scene, PipelineSetting setting, Renderer renderer);
+
+#endif
