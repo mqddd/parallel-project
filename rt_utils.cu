@@ -3,15 +3,32 @@ extern "C" {
 }
 #include "cuda_vec.cu"
 
-#define MR_MULTIPLIER 279470273
-#define MR_MODULUS 4294967291U
-#define MR_DIVISOR ((double)4294967291U)
+// #define MR_MULTIPLIER 279470273
+// #define MR_MODULUS 4294967291U
+// #define MR_DIVISOR ((double)4294967291U)
+// __device__ __forceinline__ unsigned my_rand(unsigned *seed_p) {
+//   long long z = *seed_p;
+//   z *= MR_MULTIPLIER;
+//   z %= MR_MODULUS;
+//   *seed_p = z;
+//   return *seed_p;
+// }
+
+// __device__ __forceinline__ double my_drand(unsigned *seed_p) {
+//   unsigned x = my_rand(seed_p);
+//   double y = x / MR_DIVISOR;
+//   return y * 0.99 + 0.01;
+// }
+
 __device__ __forceinline__ unsigned my_rand(unsigned *seed_p) {
-  long long z = *seed_p;
-  z *= MR_MULTIPLIER;
-  z %= MR_MODULUS;
-  *seed_p = z;
-  return *seed_p;
+  *seed_p = *seed_p * 747796405 + 2891336453;
+  unsigned result = ((*seed_p >> ((*seed_p >> 28) + 4)) ^ *seed_p) * 277803737;
+  result = (result >> 22) ^ result;
+  return result;
+}
+
+__device__ __forceinline__ double my_drand(unsigned *seed_p) {
+  return my_rand(seed_p) / 4294967295.0;
 }
 
 Scene *sample_scene_cuda() {
@@ -64,12 +81,6 @@ Scene *sample_scene_cuda() {
   int count = sizeof(objects) / sizeof(objects[0]);
 
   return create_scene(objects, count);
-}
-
-__device__ __forceinline__ double my_drand(unsigned *seed_p) {
-  unsigned x = my_rand(seed_p);
-  double y = x / MR_DIVISOR;
-  return y * 0.99 + 0.01;
 }
 
 __device__ __forceinline__ int ray_intersect(Vec3 *o, Vec3 *d,
@@ -133,7 +144,7 @@ find_closest_hit(Vec3 *o, Vec3 *d, const Object *objects, int count,
 }
 __device__ __forceinline__ float random_normal(unsigned *seed) {
   float theta = 2 * 3.1415926 * my_drand(seed);
-  float rho = sqrt(-2 * log((double)my_drand(seed)));
+  float rho = sqrt(-2 * log(my_drand(seed)));
   return rho * cos(theta);
 }
 __device__ __forceinline__ void random_direction(Vec3 *target, unsigned *seed) {
@@ -152,13 +163,13 @@ __device__ __forceinline__ void random_direction_hemi_and_lerp(Vec3 *target,
                                                                Vec3 *normal,
                                                                unsigned *seed,
                                                                double lerp) {
-  float rx = random_normal(seed);
-  float ry = random_normal(seed);
-  float rz = random_normal(seed);
-  float dot = rx * normal->x + ry * normal->y + rz * normal->z;
-  rx = dot < 0 ? -rx : rx;
-  ry = dot < 0 ? -ry : ry;
-  rz = dot < 0 ? -rz : rz;
+  float rx = random_normal(seed) + normal->x;
+  float ry = random_normal(seed) + normal->y;
+  float rz = random_normal(seed) + normal->z;
+  // float dot = rx * normal->x + ry * normal->y + rz * normal->z;
+  // rx = dot < 0 ? -rx : rx;
+  // ry = dot < 0 ? -ry : ry;
+  // rz = dot < 0 ? -rz : rz;
   target->x = target->x * (1.0 - lerp) + (rx * lerp);
   target->y = target->y * (1.0 - lerp) + (ry * lerp);
   target->z = target->z * (1.0 - lerp) + (rz * lerp);
