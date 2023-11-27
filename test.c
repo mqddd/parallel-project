@@ -21,7 +21,7 @@ void pixel_ray(double x, double y, Vec3 *origin, Vec3 *direction) {
   direction->x = x;
   direction->y = y;
   direction->z = FOCAL;
-  divide_v(direction, len_v(direction));
+  // divide_v(direction, len_v(direction));
   rotateDirection(direction, 7, 0, 0);
   normalize_v(direction);
 }
@@ -36,7 +36,7 @@ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
   Vec3 r_o, r_d, emitted_light;
 
   Vec3 sky_color, sky_emitted_light;
-  float sky_emitted_light_strength = 0.15;
+  float sky_emitted_light_strength = 0.6;
 
   for (int i = 0; i < ray_count; i++) {
     ray_color = (Vec3){.x = 1, .y = 1, .z = 1};
@@ -72,12 +72,12 @@ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
         ray_color.x *= obj->material.color.a;
         ray_color.y *= obj->material.color.b;
         ray_color.z *= obj->material.color.c;
-        float max_c = fmax(ray_color.x, fmax(ray_color.y, ray_color.z));
-        if (max_c > 1) {
-          ray_color.x /= max_c;
-          ray_color.y /= max_c;
-          ray_color.z /= max_c;
-        }
+        // float max_c = fmax(ray_color.x, fmax(ray_color.y, ray_color.z));
+        // if (max_c > 1) {
+        //   ray_color.x /= max_c;
+        //   ray_color.y /= max_c;
+        //   ray_color.z /= max_c;
+        // }
       } else {
         sky_color.x = 0.863f;
         sky_color.y = 0.949f;
@@ -100,12 +100,12 @@ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
   ray_energy->x /= ray_count;
   ray_energy->y /= ray_count;
   ray_energy->z /= ray_count;
-  float max_e = fmax(ray_energy->x, fmax(ray_energy->y, ray_energy->z));
-  if (max_e > 1) {
-    ray_energy->x /= max_e;
-    ray_energy->y /= max_e;
-    ray_energy->z /= max_e;
-  }
+  // float max_e = fmax(ray_energy->x, fmax(ray_energy->y, ray_energy->z));
+  // if (max_e > 1) {
+  //   ray_energy->x /= max_e;
+  //   ray_energy->y /= max_e;
+  //   ray_energy->z /= max_e;
+  // }
 }
 
 void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
@@ -123,7 +123,7 @@ void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
   UCHAR *b_out = (UCHAR *) malloc(sizeof(UCHAR) * w * h);
 
   // trace rays
-  #pragma omp parallel for num_threads(2)
+  // #pragma omp parallel for num_threads(1)
   for (int x_p = 0; x_p < w * rays; x_p++)
   {
     for (int y_p = 0; y_p < h; y_p++)
@@ -150,7 +150,7 @@ void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
   }
 
   // average rays
-  #pragma omp parallel for num_threads(2)
+  // #pragma omp parallel for num_threads(1)
   for (int x_p = 0; x_p < w; x_p++)
   {
     for (int y_p = 0; y_p < h; y_p++)
@@ -198,12 +198,14 @@ void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
 }
 
 int main() {
-  PipelineSetting setting = {.width = 1200,
-                             .height = 800,
+  int width = 1200;
+  int height = width * 9 / 16;
+  PipelineSetting setting = {.width = width,
+                             .height = height,
                              .debug = 1,
                              .out_file = (char *)"test.bmp",
                              .save = 1};
-  Scene *scene = sample_scene();
+  Scene *scene = sample_scene_2();
 
   pipeline(scene, setting, test_renderer);
 
