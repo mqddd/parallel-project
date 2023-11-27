@@ -5,13 +5,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 // #include <omp.h>
 
 #define VP_W 4.0f
 #define VP_H VP_W * 9 / 16
 #define DIAFRAGM 0.01f
 #define FOCAL 6.0f
-#define R_COUNT 5
+#define R_COUNT 50
 
 void pixel_ray(double x, double y, Vec3 *origin, Vec3 *direction) {
   origin->x = 0;
@@ -112,7 +113,7 @@ void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
   int w = frame->width;
   int h = frame->height;
 
-  int rays = 5;
+  int rays = 1;
 
   UCHAR *r = (UCHAR *) malloc(sizeof(UCHAR) * w * h * rays);
   UCHAR *g = (UCHAR *) malloc(sizeof(UCHAR) * w * h * rays);
@@ -122,8 +123,10 @@ void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
   UCHAR *g_out = (UCHAR *) malloc(sizeof(UCHAR) * w * h);
   UCHAR *b_out = (UCHAR *) malloc(sizeof(UCHAR) * w * h);
 
+  // double t = omp_get_wtime();
+  
   // trace rays
-  // #pragma omp parallel for num_threads(1)
+  // #pragma omp parallel for num_threads(16)
   for (int x_p = 0; x_p < w * rays; x_p++)
   {
     for (int y_p = 0; y_p < h; y_p++)
@@ -149,8 +152,13 @@ void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
     }
   }
 
+  // t = 1000 * (omp_get_wtime() - t);
+  // printf("trace in: %.3f ms\n", t);
+  
+  // t = omp_get_wtime();
+
   // average rays
-  // #pragma omp parallel for num_threads(1)
+  // #pragma omp parallel for num_threads(16)
   for (int x_p = 0; x_p < w; x_p++)
   {
     for (int y_p = 0; y_p < h; y_p++)
@@ -172,6 +180,9 @@ void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
       b_out[index] = bp / rays;
     }
   }
+
+  // t = 1000 * (omp_get_wtime() - t);
+  // printf("average in: %.3f ms\n", t);
 
   memcpy(frame->r, r_out, sizeof(UCHAR) * w * h);
   memcpy(frame->g, g_out, sizeof(UCHAR) * w * h);
@@ -198,7 +209,7 @@ void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
 }
 
 int main() {
-  int width = 1200;
+  int width = 1280;
   int height = width * 9 / 16;
   PipelineSetting setting = {.width = width,
                              .height = height,
