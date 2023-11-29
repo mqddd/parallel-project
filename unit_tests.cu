@@ -1,10 +1,103 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "test.h"
+// #include "cuda_vec.cu"
 
-__host__ static char* test()
+static char* test_add_v() 
 {
-    printf("hi\n");
+
+}
+
+static char* test_add_v() 
+{
+
+}
+
+static char* test_sub_v() 
+{
+
+}
+
+static char* test_sub_v() 
+{
+
+}
+
+static char* test_mult_v() 
+{
+
+}
+
+static char* test_mult_v() 
+{
+
+}
+
+static char* test_divide_v() 
+{
+
+}
+
+static char* test_dot_v() 
+{
+
+}
+
+static char* test_cross_v() 
+{
+
+}
+
+static char* test_copy_v() 
+{
+
+}
+
+static char* testSq_len_v() 
+{
+
+}
+
+static char* testLen_v() 
+{
+
+}
+
+static char* test_normalize_v() 
+{ 
+
+}
+
+static char* test_reflect() 
+{
+
+}
+
+static char* test_rotateX() 
+{
+
+}
+
+static char* test_rotateY() 
+{
+
+}
+
+static char* test_rotateZ() 
+{
+
+}
+
+static char* test_rotateDirection() 
+{
+
+}
+
+static char* test()
+{
+    Vec3 a = {.x=2, .y=4, .z=8};
+    Vec3 b = {.x=2, .y=4, .z=8};
+    add_v(&a, &b);
     return "success!";
 }
 

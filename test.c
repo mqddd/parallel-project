@@ -1,5 +1,5 @@
 #include "pipeline.h"
-#include "utils.c"
+#include "rt_utils.cu"
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
