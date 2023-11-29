@@ -6,11 +6,14 @@
 #define MR_DIVISOR ((double)4294967291U)
 
 unsigned my_rand(unsigned *seed_p) {
-  long long z = *seed_p;
-  z *= MR_MULTIPLIER;
-  z %= MR_MODULUS;
-  *seed_p = z;
-  return *seed_p;
+  *seed_p = *seed_p * 747796405 + 2891336453;
+  unsigned result = ((*seed_p >> ((*seed_p >> 28) + 4)) ^ *seed_p) * 277803737;
+  result = (result >> 22) ^ result;
+  return result;
+}
+
+double my_drand(unsigned *seed_p) {
+  return my_rand(seed_p) / 4294967295.0;
 }
 
 Scene *sample_scene() {
@@ -113,12 +116,6 @@ Scene *sample_scene_2() {
   int count = sizeof(objects) / sizeof(objects[0]);
 
   return create_scene(objects, count);
-}
-
-double my_drand(unsigned *seed_p) {
-  unsigned x = my_rand(seed_p);
-  double y = x / MR_DIVISOR;
-  return y * 0.99 + 0.01;
 }
 
 int ray_intersect(Vec3 *o, Vec3 *d, Object *object,

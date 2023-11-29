@@ -6,13 +6,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-// #include <omp.h>
+#include <omp.h>
 
 #define VP_W 4.0f
 #define VP_H VP_W * 9 / 16
 #define DIAFRAGM 0.01f
 #define FOCAL 6.0f
-#define R_COUNT 50
+#define R_COUNT 500
 
 void pixel_ray(double x, double y, Vec3 *origin, Vec3 *direction) {
   origin->x = 0;
@@ -122,11 +122,9 @@ void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
   UCHAR *r_out = (UCHAR *) malloc(sizeof(UCHAR) * w * h);
   UCHAR *g_out = (UCHAR *) malloc(sizeof(UCHAR) * w * h);
   UCHAR *b_out = (UCHAR *) malloc(sizeof(UCHAR) * w * h);
-
-  // double t = omp_get_wtime();
   
   // trace rays
-  // #pragma omp parallel for num_threads(16)
+  #pragma omp parallel for num_threads(16)
   for (int x_p = 0; x_p < w * rays; x_p++)
   {
     for (int y_p = 0; y_p < h; y_p++)
@@ -134,7 +132,7 @@ void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
       int x_p_temp = x_p / rays;
 
       int index = y_p * w * rays + x_p;
-      unsigned int seed = index + 10; // why?
+      unsigned int seed = index + 10;
 
       double x = ((x_p_temp - w / 2.0) / w) * VP_W * 2,
              y = -((y_p - h / 2.0) / h) * VP_H * 2;
@@ -146,70 +144,26 @@ void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
       Vec3 ray_energy = {.x = 0, .y = 0, .z = 0};
       trace_ray(&r_origin, &r_dir, R_COUNT, scene->objects, scene->count, &ray_energy, &seed);
 
+      float max_e = fmax(ray_energy.x, fmax(ray_energy.y, ray_energy.z));
+      if (max_e > 1) {
+        ray_energy.x = (ray_energy.x / max_e) * 1.5;
+        ray_energy.y = (ray_energy.y / max_e) * 1.5;
+        ray_energy.z = (ray_energy.z / max_e) * 1.5;
+      }
+      
       r[index] = (ray_energy.x > 1 ? 1 : ray_energy.x) * 255.0;
       g[index] = (ray_energy.y > 1 ? 1 : ray_energy.y) * 255.0;
       b[index] = (ray_energy.z > 1 ? 1 : ray_energy.z) * 255.0; 
     }
   }
 
-  // t = 1000 * (omp_get_wtime() - t);
-  // printf("trace in: %.3f ms\n", t);
-  
-  // t = omp_get_wtime();
-
-  // average rays
-  // #pragma omp parallel for num_threads(16)
-  for (int x_p = 0; x_p < w; x_p++)
-  {
-    for (int y_p = 0; y_p < h; y_p++)
-    {
-      int index = y_p * w + x_p;
-  
-      int rp = 0;
-      int gp = 0;
-      int bp = 0;
-      for (int i = 0; i < rays; i++) {
-        int in_index = (x_p * rays) + i + y_p * (w * rays);
-        rp += r[in_index];
-        gp += g[in_index];
-        bp += b[in_index];
-      }
-
-      r_out[index] = rp / rays;
-      g_out[index] = gp / rays;
-      b_out[index] = bp / rays;
-    }
-  }
-
-  // t = 1000 * (omp_get_wtime() - t);
-  // printf("average in: %.3f ms\n", t);
-
-  memcpy(frame->r, r_out, sizeof(UCHAR) * w * h);
-  memcpy(frame->g, g_out, sizeof(UCHAR) * w * h);
-  memcpy(frame->b, b_out, sizeof(UCHAR) * w * h);
-
-  // frame->r = r_out;
-  // frame->g = g_out;
-  // frame->b = b_out;
-  
-  // for (int y = 0; y < h; y++)
-  //   for (int x = 0; x < w; x++) {
-  //     int index = x + y * w;
-  //     for (int i = 0; i < scene->count; i++) {
-  //       Object o = scene->objects[i];
-  //       int i_x = x - o.x;
-  //       int i_y = y - o.y;
-  //       if (i_x * i_x + i_y * i_y <= o.radius * o.radius) {
-  //         frame->r[index] = o.color.r;
-  //         frame->g[index] = o.color.g;
-  //         frame->b[index] = o.color.b;
-  //       }
-  //     }
-  // }
+  memcpy(frame->r, r, sizeof(UCHAR) * w * h);
+  memcpy(frame->g, g, sizeof(UCHAR) * w * h);
+  memcpy(frame->b, b, sizeof(UCHAR) * w * h);
 }
 
 int main() {
-  int width = 1280;
+  int width = 1920;
   int height = width * 9 / 16;
   PipelineSetting setting = {.width = width,
                              .height = height,
