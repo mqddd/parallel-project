@@ -10,11 +10,11 @@
 
 #define VP_W 4.0f
 #define VP_H VP_W * 9 / 16
-#define DIAFRAGM 0.01f
+#define DIAFRAGM 0.002f
 #define FOCAL 6.0f
-#define R_COUNT 500
+#define R_COUNT 50
 
-void pixel_ray(double x, double y, Vec3 *origin, Vec3 *direction) {
+void pixel_ray(float x, float y, Vec3 *origin, Vec3 *direction) {
   origin->x = 0;
   origin->y = 4.0f;
   origin->z = 0;
@@ -36,7 +36,7 @@ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
   int hit_index, reflect_count, prev_hit_index = -1;
   Vec3 r_o, r_d, emitted_light;
 
-  Vec3 sky_color, sky_emitted_light;
+  Vec3 sky_emitted_light;
   float sky_emitted_light_strength = 0.6;
 
   for (int i = 0; i < ray_count; i++) {
@@ -45,10 +45,11 @@ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
     copy_v(&r_o, origin);
     copy_v(&r_d, direction);
     prev_hit_index = -1;
-    r_o.x += my_drand(seed) * DIAFRAGM - DIAFRAGM / 2;
-    r_o.y += my_drand(seed) * DIAFRAGM - DIAFRAGM / 2;
+    move_point_randomly_in_circle(&r_o, seed, DIAFRAGM / 2);
+    r_o.x += my_drand(seed) * 0.001 - 0.0005;
+    r_o.y += my_drand(seed) * 0.001 - 0.0005;
     normalize_v(&r_d);
-    while (reflect_count < 15) {
+    while (reflect_count < 10) {
       if (find_closest_hit(&r_o, &r_d, objects, object_count, prev_hit_index,
                            &intersection, &normal, &hit_index)) {
         reflect_count++;
@@ -61,38 +62,27 @@ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
                                        1.0 - obj->material.specular_rate);
         normalize_v(&r_d);
 
-        emitted_light.x = obj->material.emission_color.a;
-        emitted_light.y = obj->material.emission_color.b;
-        emitted_light.z = obj->material.emission_color.c;
-        _mult_v(&emitted_light, obj->material.emission_strength);
+        emitted_light.x = obj->material.emission_color.a *
+                          obj->material.emission_strength * ray_color.x;
+        emitted_light.y = obj->material.emission_color.b *
+                          obj->material.emission_strength * ray_color.y;
+        emitted_light.z = obj->material.emission_color.c *
+                          obj->material.emission_strength * ray_color.z;
 
-        mult_v(&emitted_light, &ray_color);
         add_v(ray_energy, &emitted_light);
-        float max_e = fmax(ray_energy->x, fmax(ray_energy->y, ray_energy->z));
 
         ray_color.x *= obj->material.color.a;
         ray_color.y *= obj->material.color.b;
         ray_color.z *= obj->material.color.c;
-        // float max_c = fmax(ray_color.x, fmax(ray_color.y, ray_color.z));
-        // if (max_c > 1) {
-        //   ray_color.x /= max_c;
-        //   ray_color.y /= max_c;
-        //   ray_color.z /= max_c;
-        // }
       } else {
-        sky_color.x = 0.863f;
-        sky_color.y = 0.949f;
-        sky_color.z = 0.961f;
-        sky_emitted_light.x = sky_emitted_light_strength;
-        sky_emitted_light.y = sky_emitted_light_strength;
-        sky_emitted_light.z = sky_emitted_light_strength;
+        sky_emitted_light.x =
+            (1) * sky_emitted_light_strength * ray_color.x;
+        sky_emitted_light.y =
+            (1) * sky_emitted_light_strength * ray_color.y;
+        sky_emitted_light.z =
+            (1) * sky_emitted_light_strength * ray_color.z;
 
-        mult_v(&sky_emitted_light, &sky_color);
-
-        mult_v(&sky_emitted_light, &ray_color);
         add_v(ray_energy, &sky_emitted_light);
-        float max_e = fmax(ray_energy->x, fmax(ray_energy->y, ray_energy->z));
-
         break;
       }
     }
@@ -124,17 +114,18 @@ void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
   UCHAR *b_out = (UCHAR *) malloc(sizeof(UCHAR) * w * h);
   
   // trace rays
-  #pragma omp parallel for num_threads(16)
+  // #pragma omp parallel for num_threads(16)
   for (int x_p = 0; x_p < w * rays; x_p++)
   {
+    #pragma omp parallel for num_threads(16)
     for (int y_p = 0; y_p < h; y_p++)
     {
       int x_p_temp = x_p / rays;
 
-      int index = y_p * w * rays + x_p;
+      int index = y_p * w + x_p;
       unsigned int seed = index + 10;
 
-      double x = ((x_p_temp - w / 2.0) / w) * VP_W * 2,
+      float x = ((x_p_temp - w / 2.0) / w) * VP_W * 2,
              y = -((y_p - h / 2.0) / h) * VP_H * 2;
       
       Vec3 r_origin;

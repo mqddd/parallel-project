@@ -3,7 +3,7 @@
 
 #define MR_MULTIPLIER 279470273
 #define MR_MODULUS 4294967291U
-#define MR_DIVISOR ((double)4294967291U)
+#define MR_DIVISOR ((float)4294967291U)
 
 unsigned my_rand(unsigned *seed_p) {
   *seed_p = *seed_p * 747796405 + 2891336453;
@@ -12,7 +12,7 @@ unsigned my_rand(unsigned *seed_p) {
   return result;
 }
 
-double my_drand(unsigned *seed_p) {
+float my_drand(unsigned *seed_p) {
   return my_rand(seed_p) / 4294967295.0;
 }
 
@@ -119,21 +119,21 @@ Scene *sample_scene_2() {
 }
 
 int ray_intersect(Vec3 *o, Vec3 *d, Object *object,
-                             Vec3 *intersection, Vec3 *normal, double *dst) {
+                             Vec3 *intersection, Vec3 *normal, float *dst) {
   Vec3 oc;
   oc.x = o->x - object->pos.a;
   oc.y = o->y - object->pos.b;
   oc.z = o->z - object->pos.c;
 
-  double a = dot_v(d, d);
-  double b = 2.0 * dot_v(&oc, d);
-  double c = dot_v(&oc, &oc) - object->radius * object->radius;
-  double discriminant = b * b - 4 * a * c;
+  float a = dot_v(d, d);
+  float b = 2.0 * dot_v(&oc, d);
+  float c = dot_v(&oc, &oc) - object->radius * object->radius;
+  float discriminant = b * b - 4 * a * c;
 
   if (discriminant < 0 || b > 0) {
     return 0;
   } else {
-    double sqrt_discr = sqrt(discriminant);
+    float sqrt_discr = sqrt(discriminant);
     *dst = (-b - sqrt_discr) / (2 * a);
     if (*dst > 0) {
 
@@ -155,31 +155,22 @@ int ray_intersect(Vec3 *o, Vec3 *d, Object *object,
 int find_closest_hit(Vec3 *o, Vec3 *d, Object *objects, int count,
                                 int last_hit_index, Vec3 *intersection,
                                 Vec3 *normal, int *clostest_object_index) {
-  double best_dst = 9999999;
-  Vec3 best_inter, best_normal;
+  float current_dst, best_dst = 9999999;
+  Vec3 current_intersection, current_normal;
   for (int i = 0; i < count; i++) {
     if (last_hit_index == i)
       continue;
-    double t;
-    if (ray_intersect(o, d, &(objects[i]), intersection, normal, &t)) {
-      if (t < best_dst) {
-        best_dst = t;
-        copy_v(&best_inter, intersection);
-        copy_v(&best_normal, normal);
+    if (ray_intersect(o, d, &(objects[i]), &current_intersection,
+                      &current_normal, &current_dst)) {
+      if (current_dst < best_dst) {
+        best_dst = current_dst;
+        copy_v(intersection, &current_intersection);
+        copy_v(normal, &current_normal);
         *clostest_object_index = i;
       }
     }
   }
   if (best_dst < 9999999) {
-    copy_v(intersection, &best_inter);
-    copy_v(normal, &best_normal);
-    normalize_v(normal);
-    // Vec3 copy;
-    // copy_v(&copy, normal);
-    // double len = len_v(normal);
-    // if (len > 1.001 || len < 0.999) {
-    //   divide_v(normal, len);
-    // }
     return 1;
   } else
     return 0;
@@ -187,38 +178,46 @@ int find_closest_hit(Vec3 *o, Vec3 *d, Object *objects, int count,
 
 float random_normal(unsigned *seed) {
   float theta = 2 * 3.1415926 * my_drand(seed);
-  float rho = sqrt(-2 * log((double)my_drand(seed)));
+  float rho = sqrt(-2 * log(my_drand(seed)));
+  // float rho = 1;
   return rho * cos(theta);
 }
 
-void random_direction(Vec3 *target, unsigned *seed) {
-  target->x = random_normal(seed);
-  target->y = random_normal(seed);
-  target->z = random_normal(seed);
-  normalize_v(target);
-}
+// void random_direction(Vec3 *target, unsigned *seed) {
+//   target->x = random_normal(seed);
+//   target->y = random_normal(seed);
+//   target->z = random_normal(seed);
+//   normalize_v(target);
+// }
 
-void random_direction_hemi(Vec3 *target, Vec3 *normal,
-                                      unsigned *seed) {
-  random_direction(target, seed);
-  if (dot_v(normal, target) < 0)
-    _mult_v(target, -1);
-}
+// void random_direction_hemi(Vec3 *target, Vec3 *normal,
+//                                       unsigned *seed) {
+//   random_direction(target, seed);
+//   if (dot_v(normal, target) < 0)
+//     _mult_v(target, -1);
+// }
 
 void random_direction_hemi_and_lerp(Vec3 *target, Vec3 *normal,
-                                               unsigned *seed, double lerp) {
+                                               unsigned *seed, float lerp) {
   float rx = random_normal(seed);
   float ry = random_normal(seed);
   float rz = random_normal(seed);
-  float dot = rx * normal->x + ry * normal->y + rz * normal->z;
-  rx = dot < 0 ? -rx : rx;
-  ry = dot < 0 ? -ry : ry;
-  rz = dot < 0 ? -rz : rz;
+  // float dot = rx * normal->x + ry * normal->y + rz * normal->z;
+  // rx = dot < 0 ? -rx : rx;
+  // ry = dot < 0 ? -ry : ry;
+  // rz = dot < 0 ? -rz : rz;
   target->x = target->x * (1.0 - lerp) + (rx * lerp);
   target->y = target->y * (1.0 - lerp) + (ry * lerp);
   target->z = target->z * (1.0 - lerp) + (rz * lerp);
 }
 
-double lerp(double a, double b, double f) {
+void move_point_randomly_in_circle(Vec3 *target, unsigned *seed, float radius) {
+  float theta = 2 * 3.1415926 * my_drand(seed);
+  float rho = sqrt(my_drand(seed)) * radius;
+  target->x += rho * cos(theta);
+  target->y += rho * sin(theta);
+}
+
+float lerp(float a, float b, float f) {
   return a * (1.0 - f) + (b * f);
 }
