@@ -2,21 +2,6 @@
 #include <stdio.h>
 #include "test.h"
 #include "cuda_vec.cu"
-#include "rt_utils.cu"
-
-static char* test_ray_intersect() 
-{
-
-
-    return 0;
-}
-
-static char* test_find_closest_hit() 
-{
-
-
-    return 0;
-}
 
 static char* test_add_v() 
 {
