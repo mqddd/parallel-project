@@ -18,21 +18,10 @@ void free_scene(Scene *scene) {
 }
 
 Scene *sample_scene1() {
-  Object objects[] = {{.pos = {.a = 100.0, .b = 200.0, .c = 5.0},
-                       .radius = 12.0,
-                       .material = {.color = {.a = 120.5, .b = 220.5, .c = 0.5}}}};
+  Object objects[] = {{.pos = {.a = 10.0, .b = 20.0, .c = 5.0},
+                       .radius = 2.0,
+                       .material = {.color = {.a = 0.5, .b = 0.5, .c = 0.5}}}};
   int count = sizeof(objects) / sizeof(objects[0]);
 
   return create_scene(objects, count);
 }
-
-// int main() {
-//   Scene * scene = sample_scene1();
-//   printf("count %d\n", scene->count);
-
-//   for (int i = 0; i < scene->count; i++){
-//     Object o = scene->objects[i];
-//     printf("%f %f %f: %f - %d %d %d\n", o.x, o.y, o.z, o.radius, o.color.r,
-//     o.color.g, o.color.b);
-//   }
-// }
