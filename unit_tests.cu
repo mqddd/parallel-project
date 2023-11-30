@@ -1,7 +1,69 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "test.h"
-#include "cuda_vec.cu"
+#include "rt_utils.cu"
+
+static char* test_ray_intersect()
+{
+    Vec3 ray_origin = {.x=1, .y=1, .z=1};
+    Vec3 ray_direction = {.x=10, .y=10, .z=10};
+    Object objects[] = {
+        {
+            .pos = {.a=1001, .b=999, .c=1000},
+            .radius = 25
+        },
+        {
+            .pos = {.a=-1000, .b=999, .c=1000},
+            .radius = 25
+        },
+        {
+            .pos = {.a=500, .b=499, .c=505},
+            .radius = 25
+        }
+    };
+    Vec3 intersection;
+    Vec3 normal;
+    float dst;
+    if (!ray_intersect(&ray_origin, &ray_direction, &objects[0], &intersection, &normal, &dst) ||
+         ray_intersect(&ray_origin, &ray_direction, &objects[1], &intersection, &normal, &dst) ||
+        !ray_intersect(&ray_origin, &ray_direction, &objects[2], &intersection, &normal, &dst))
+    {
+        return "1. ray_intersect test failed!\n";
+    }
+
+    return 0;
+}
+
+static char* test_find_closest_hit()
+{
+    Vec3 ray_origin = {.x=0, .y=0, .z=0};
+    Vec3 ray_direction = {.x=10, .y=10, .z=10};
+    Object objects[] = {
+        {
+            .pos = {.a=1001, .b=999, .c=1000},
+            .radius = 25
+        },
+        {
+            .pos = {.a=-1000, .b=999, .c=1000},
+            .radius = 25
+        },
+        {
+            .pos = {.a=-1000, .b=-999, .c=-1000},
+            .radius = 25
+        }
+    };
+    int count = 3;
+    int last_hit_index = -1; 
+    Vec3 intersection;
+    Vec3 normal;
+    int clostest_object_index;
+    if (!find_closest_hit(&ray_origin, &ray_direction, objects, count, last_hit_index, &intersection, &normal, &clostest_object_index))
+    {
+        return "1. find closest test failed!\n";
+    }
+
+    return 0;
+}
 
 static char* test_add_v() 
 {
@@ -238,6 +300,8 @@ static char* test_rotateDirection()
 
 static char* all_tests() 
 {
+    run_test(test_ray_intersect);
+	run_test(test_add_v);
 	run_test(test_add_v);
     run_test(test_sub_v);
 	run_test(test_mult_v);
