@@ -5,6 +5,7 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <omp.h>
 
 #define gpuErrchk(ans)                                                         \
   { gpuAssert((ans), __FILE__, __LINE__); }
@@ -18,13 +19,29 @@ inline void gpuAssert(cudaError_t code, const char *file, int line,
   }
 }
 
-#define VP_W 4.0f
-#define VP_H VP_W * 9 / 16
-#define DIAFRAGM 0.01f
-#define FOCAL 6.0f
-#define R_COUNT 5
+#define cudaCheckForErrorAndSync()                                             \
+  gpuErrchk(cudaPeekAtLastError());                                            \
+  gpuErrchk(cudaDeviceSynchronize());
 
-__device__ void pixel_ray(double x, double y, Vec3 *origin, Vec3 *direction) {
+#define cudaStartTimer(start, stop)                                            \
+  cudaEventCreate(&start);                                                     \
+  cudaEventCreate(&stop);                                                      \
+  cudaEventRecord(start, 0);
+
+#define cudaStopTimerAndRecord(start, stop, time)                              \
+  cudaEventRecord(stop, 0);                                                    \
+  cudaEventSynchronize(stop);                                                  \
+  cudaEventElapsedTime(&time, start, stop);
+
+#define VP_W 0.7f
+#define VP_H VP_W * 9 / 16
+#define DIAFRAGM 0.002f
+#define FOCAL 10
+#define RAY_BOUNCE_LIMIT 10
+#define R_COUNT 50
+
+__host__ __device__ __forceinline__ void pixel_ray(float x, float y, Vec3 *origin,
+                                          Vec3 *direction) {
   origin->x = 0;
   origin->y = 4.0f;
   origin->z = 0;
@@ -32,22 +49,23 @@ __device__ void pixel_ray(double x, double y, Vec3 *origin, Vec3 *direction) {
   direction->x = x;
   direction->y = y;
   direction->z = FOCAL;
-  divide_v(direction, len_v(direction));
+  // divide_v(direction, len_v(direction));
   rotateDirection(direction, 7, 0, 0);
   normalize_v(direction);
 }
 
-__device__ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
-                          Object *objects, int object_count, Vec3 *ray_energy,
-                          unsigned *seed) {
+__host__ __device__ __forceinline__ void trace_ray(Vec3 *origin, Vec3 *direction,
+                                          int ray_count, const Object *objects,
+                                          int object_count, Vec3 *ray_energy,
+                                          unsigned *seed) {
   Vec3 ray_color = {.x = 1, .y = 1, .z = 1};
 
   Vec3 intersection, normal;
   int hit_index, reflect_count, prev_hit_index = -1;
   Vec3 r_o, r_d, emitted_light;
 
-  Vec3 sky_color, sky_emitted_light;
-  float sky_emitted_light_strength = 0.15;
+  Vec3 sky_emitted_light;
+  float sky_emitted_light_strength = 0.6;
 
   for (int i = 0; i < ray_count; i++) {
     ray_color = {.x = 1, .y = 1, .z = 1};
@@ -55,14 +73,15 @@ __device__ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
     copy_v(&r_o, origin);
     copy_v(&r_d, direction);
     prev_hit_index = -1;
-    r_o.x += my_drand(seed) * DIAFRAGM - DIAFRAGM / 2;
-    r_o.y += my_drand(seed) * DIAFRAGM - DIAFRAGM / 2;
+    move_point_randomly_in_circle(&r_o, seed, DIAFRAGM / 2);
+    r_d.x += my_drand(seed) * 0.001 - 0.0005;
+    r_d.y += my_drand(seed) * 0.001 - 0.0005;
     normalize_v(&r_d);
-    while (reflect_count < 15) {
+    while (reflect_count < RAY_BOUNCE_LIMIT) {
       if (find_closest_hit(&r_o, &r_d, objects, object_count, prev_hit_index,
                            &intersection, &normal, &hit_index)) {
         reflect_count++;
-        Object *obj = &objects[hit_index];
+        const Object *obj = &objects[hit_index];
         prev_hit_index = hit_index;
 
         copy_v(&r_o, &intersection);
@@ -71,38 +90,27 @@ __device__ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
                                        1.0 - obj->material.specular_rate);
         normalize_v(&r_d);
 
-        emitted_light.x = obj->material.emission_color.a;
-        emitted_light.y = obj->material.emission_color.b;
-        emitted_light.z = obj->material.emission_color.c;
-        mult_v(&emitted_light, obj->material.emission_strength);
+        emitted_light.x = obj->material.emission_color.a *
+                          obj->material.emission_strength * ray_color.x;
+        emitted_light.y = obj->material.emission_color.b *
+                          obj->material.emission_strength * ray_color.y;
+        emitted_light.z = obj->material.emission_color.c *
+                          obj->material.emission_strength * ray_color.z;
 
-        mult_v(&emitted_light, &ray_color);
         add_v(ray_energy, &emitted_light);
-        float max_e = max(ray_energy->x, max(ray_energy->y, ray_energy->z));
 
         ray_color.x *= obj->material.color.a;
         ray_color.y *= obj->material.color.b;
         ray_color.z *= obj->material.color.c;
-        float max_c = max(ray_color.x, max(ray_color.y, ray_color.z));
-        if (max_c > 1) {
-          ray_color.x /= max_c;
-          ray_color.y /= max_c;
-          ray_color.z /= max_c;
-        }
       } else {
-        sky_color.x = 0.863f;
-        sky_color.y = 0.949f;
-        sky_color.z = 0.961f;
-        sky_emitted_light.x = sky_emitted_light_strength;
-        sky_emitted_light.y = sky_emitted_light_strength;
-        sky_emitted_light.z = sky_emitted_light_strength;
+        sky_emitted_light.x =
+            (1) * sky_emitted_light_strength * ray_color.x;
+        sky_emitted_light.y =
+            (1) * sky_emitted_light_strength * ray_color.y;
+        sky_emitted_light.z =
+            (1) * sky_emitted_light_strength * ray_color.z;
 
-        mult_v(&sky_emitted_light, &sky_color);
-
-        mult_v(&sky_emitted_light, &ray_color);
         add_v(ray_energy, &sky_emitted_light);
-        float max_e = max(ray_energy->x, max(ray_energy->y, ray_energy->z));
-
         break;
       }
     }
@@ -111,16 +119,12 @@ __device__ void trace_ray(Vec3 *origin, Vec3 *direction, int ray_count,
   ray_energy->x /= ray_count;
   ray_energy->y /= ray_count;
   ray_energy->z /= ray_count;
-  float max_e = max(ray_energy->x, max(ray_energy->y, ray_energy->z));
-  if (max_e > 1) {
-    ray_energy->x /= max_e;
-    ray_energy->y /= max_e;
-    ray_energy->z /= max_e;
-  }
 }
 
-__global__ void test_kernel(Object *objects, int count, UCHAR *r, UCHAR *g,
-                            UCHAR *b, int w, int h, int rays) {
+__global__ void test_kernel(const Object *objects, const int count,
+                            unsigned short *r, unsigned short *g,
+                            unsigned short *b, const int w, const int h,
+                            const int rays, const int ray_coercion) {
   int x_p = (blockDim.x * blockIdx.x + threadIdx.x) / rays;
   int y_p = blockDim.y * blockIdx.y + threadIdx.y;
 
@@ -129,22 +133,24 @@ __global__ void test_kernel(Object *objects, int count, UCHAR *r, UCHAR *g,
   int index = blockDim.x * blockIdx.x + threadIdx.x + y_p * (w * rays);
   unsigned int seed = index + 10;
 
-  double x = ((x_p - w / 2.0) / w) * VP_W * 2,
-         y = -((y_p - h / 2.0) / h) * VP_H * 2;
+  float x = ((x_p - w / 2.0) / w) * VP_W * FOCAL * 2,
+        y = -((y_p - h / 2.0) / h) * VP_H * FOCAL * 2;
 
   Vec3 r_origin;
   Vec3 r_dir;
   pixel_ray(x, y, &r_origin, &r_dir);
 
   Vec3 ray_energy = {.x = 0, .y = 0, .z = 0};
-  trace_ray(&r_origin, &r_dir, R_COUNT, objects, count, &ray_energy, &seed);
+  trace_ray(&r_origin, &r_dir, ray_coercion, objects, count, &ray_energy,
+            &seed);
 
-  r[index] = (ray_energy.x > 1 ? 1 : ray_energy.x) * 255.0;
-  g[index] = (ray_energy.y > 1 ? 1 : ray_energy.y) * 255.0;
-  b[index] = (ray_energy.z > 1 ? 1 : ray_energy.z) * 255.0;
+  r[index] = ray_energy.x * 255.0;
+  g[index] = ray_energy.y * 255.0;
+  b[index] = ray_energy.z * 255.0;
 }
 
-__global__ void average_kernel(UCHAR *r, UCHAR *g, UCHAR *b, UCHAR *r_out,
+__global__ void average_kernel(const unsigned short *r, const unsigned short *g,
+                               const unsigned short *b, UCHAR *r_out,
                                UCHAR *g_out, UCHAR *b_out, int w, int h,
                                int rays) {
   int x_p = blockDim.x * blockIdx.x + threadIdx.x;
@@ -153,9 +159,9 @@ __global__ void average_kernel(UCHAR *r, UCHAR *g, UCHAR *b, UCHAR *r_out,
     return;
   int index = x_p + y_p * w;
 
-  int rp = 0;
-  int gp = 0;
-  int bp = 0;
+  float rp = 0;
+  float gp = 0;
+  float bp = 0;
   for (int i = 0; i < rays; i++) {
     int in_index = (x_p * rays) + i + y_p * (w * rays);
     rp += r[in_index];
@@ -163,21 +169,33 @@ __global__ void average_kernel(UCHAR *r, UCHAR *g, UCHAR *b, UCHAR *r_out,
     bp += b[in_index];
   }
 
-  r_out[index] = rp / rays;
-  g_out[index] = gp / rays;
-  b_out[index] = bp / rays;
+  rp = rp / rays;
+  gp = gp / rays;
+  bp = bp / rays;
+
+  float max_e = max(rp, max(gp, bp));
+  if (max_e > 255) {
+    rp = (rp / max_e) * 255 * 1.5;
+    gp = (gp / max_e) * 255 * 1.5;
+    bp = (bp / max_e) * 255 * 1.5;
+  }
+
+  r_out[index] = (rp) > 255 ? 255 : (rp);
+  g_out[index] = (gp) > 255 ? 255 : (gp);
+  b_out[index] = (bp) > 255 ? 255 : (bp);
 }
 
-void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
+__host__ void test_cuda_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
   int w = frame->width;
   int h = frame->height;
-  int rays = 5;
-  UCHAR *r;
-  cudaMalloc(&r, sizeof(UCHAR) * w * h * rays);
-  UCHAR *g;
-  cudaMalloc(&g, sizeof(UCHAR) * w * h * rays);
-  UCHAR *b;
-  cudaMalloc(&b, sizeof(UCHAR) * w * h * rays);
+  int rays_thread_count = setting.ray_per_pixel / setting.cuda_coercion_rate;
+  int ray_coercion = setting.ray_per_pixel / rays_thread_count;
+  unsigned short *r;
+  cudaMalloc(&r, sizeof(unsigned short) * w * h * rays_thread_count);
+  unsigned short *g;
+  cudaMalloc(&g, sizeof(unsigned short) * w * h * rays_thread_count);
+  unsigned short *b;
+  cudaMalloc(&b, sizeof(unsigned short) * w * h * rays_thread_count);
 
   UCHAR *r_out;
   cudaMalloc(&r_out, sizeof(UCHAR) * w * h);
@@ -193,35 +211,34 @@ void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
 
   int block_size = 16;
   dim3 thd = dim3(block_size, block_size);
-  dim3 bld = dim3((w * rays - 1) / block_size + 1, (h - 1) / block_size + 1);
-  printf("%d, %d\n", w, h);
-  printf("%d, %d\n", bld.x, bld.y);
+  dim3 bld = dim3((w * rays_thread_count - 1) / block_size + 1,
+                  (h - 1) / block_size + 1);
+
+  printf("Width: %d, Height: %d, Rays per pixel: %d\n", w, h,
+         setting.ray_per_pixel);
+  printf("Grid width: %d, Grid height: %d, Total thread count: %d\n", bld.x,
+         bld.y, w * h * rays_thread_count);
+  printf("Total ray per pixel: %d, Thread for each ray: %d, Rays per thread: "
+         "%d\n",
+         rays_thread_count * ray_coercion, rays_thread_count, ray_coercion);
 
   float time;
   cudaEvent_t start, stop;
-  cudaEventCreate(&start);
-  cudaEventCreate(&stop);
-  cudaEventRecord(start, 0);
+  cudaStartTimer(start, stop);
 
-  test_kernel<<<bld, thd>>>(d_objects, scene->count, r, g, b, w, h, rays);
-  gpuErrchk(cudaPeekAtLastError());
-  gpuErrchk(cudaDeviceSynchronize());
-  cudaEventRecord(stop, 0);
-  cudaEventSynchronize(stop);
-  cudaEventElapsedTime(&time, start, stop);
+  test_kernel<<<bld, thd>>>(d_objects, scene->count, r, g, b, w, h,
+                            rays_thread_count, ray_coercion);
+  cudaCheckForErrorAndSync();
+  cudaStopTimerAndRecord(start, stop, time);
   printf("GPU kernel took %.4f ms \n\n", time);
 
   // ----
-  cudaEventCreate(&start);
-  cudaEventCreate(&stop);
-  cudaEventRecord(start, 0);
+  cudaStartTimer(start, stop);
 
-  average_kernel<<<bld, thd>>>(r, g, b, r_out, g_out, b_out, w, h, rays);
-  gpuErrchk(cudaPeekAtLastError());
-  gpuErrchk(cudaDeviceSynchronize());
-  cudaEventRecord(stop, 0);
-  cudaEventSynchronize(stop);
-  cudaEventElapsedTime(&time, start, stop);
+  average_kernel<<<bld, thd>>>(r, g, b, r_out, g_out, b_out, w, h,
+                               rays_thread_count);
+  cudaCheckForErrorAndSync();
+  cudaStopTimerAndRecord(start, stop, time);
   printf("Average kernel took %.4f ms \n\n", time);
 
   cudaMemcpy(frame->r, r_out, w * h, cudaMemcpyDeviceToHost);
@@ -232,17 +249,105 @@ void test_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
   cudaFree(b);
 }
 
-int main() {
-  int width = 1200;
+__host__ void test_openmp_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
+  int w = frame->width;
+  int h = frame->height;
+
+  UCHAR *r = (UCHAR *) malloc(sizeof(UCHAR) * w * h);
+  UCHAR *g = (UCHAR *) malloc(sizeof(UCHAR) * w * h);
+  UCHAR *b = (UCHAR *) malloc(sizeof(UCHAR) * w * h);
+
+  UCHAR *r_out = (UCHAR *) malloc(sizeof(UCHAR) * w * h);
+  UCHAR *g_out = (UCHAR *) malloc(sizeof(UCHAR) * w * h);
+  UCHAR *b_out = (UCHAR *) malloc(sizeof(UCHAR) * w * h);
+  
+  #pragma omp parallel for num_threads(16)
+  for (int x_p = 0; x_p < w; x_p++)
+  {
+    for (int y_p = 0; y_p < h; y_p++)
+    {
+      int index = y_p * w + x_p;
+      unsigned int seed = index + 10;
+
+      float x = ((x_p - w / 2.0) / w) * VP_W * FOCAL * 2,
+             y = -((y_p - h / 2.0) / h) * VP_H * FOCAL * 2;
+      
+      Vec3 r_origin;
+      Vec3 r_dir;
+      pixel_ray(x, y, &r_origin, &r_dir);
+
+      Vec3 ray_energy = {.x = 0, .y = 0, .z = 0};
+      trace_ray(&r_origin, &r_dir, R_COUNT, scene->objects, scene->count, &ray_energy, &seed);
+
+      float max_e = fmax(ray_energy.x, fmax(ray_energy.y, ray_energy.z));
+      if (max_e > 1) {
+        ray_energy.x = (ray_energy.x / max_e) * 1.5;
+        ray_energy.y = (ray_energy.y / max_e) * 1.5;
+        ray_energy.z = (ray_energy.z / max_e) * 1.5;
+      }
+      
+      r[index] = (ray_energy.x > 1 ? 1 : ray_energy.x) * 255.0;
+      g[index] = (ray_energy.y > 1 ? 1 : ray_energy.y) * 255.0;
+      b[index] = (ray_energy.z > 1 ? 1 : ray_energy.z) * 255.0; 
+    }
+  }
+
+  memcpy(frame->r, r, sizeof(UCHAR) * w * h);
+  memcpy(frame->g, g, sizeof(UCHAR) * w * h);
+  memcpy(frame->b, b, sizeof(UCHAR) * w * h);
+
+  free(r);
+  free(g);
+  free(b);
+}
+
+int main(int argc, char *argv[]) {
+  int ray_count;
+  int width;
+  int coersion_rate = 3;
+  if (argc == 4) {
+    width = atoi(argv[1]);
+    ray_count = atoi(argv[2]);
+    coersion_rate = atoi(argv[3]);
+    if (width <= 0) {
+      printf("Please provide a valid positive integer for width.\n");
+      return 1;
+    }
+    if (ray_count <= 0) {
+      printf("Please provide a valid positive integer for ray_per_pixel.\n");
+      return 1;
+    }
+    if (coersion_rate <= 0) {
+      printf("Please provide a valid positive integer for coersion_rate.\n");
+      return 1;
+    }
+  }
+
   int height = width * 9 / 16;
-  PipelineSetting setting = {.width = width,
+  PipelineSetting cu_setting = {.width = width,
                              .height = height,
+                             .ray_per_pixel = ray_count,
+                             .cuda_coercion_rate = coersion_rate,
                              .debug = 1,
                              .save = 1,
                              .out_file = (char *)"test_cu.bmp"};
   Scene *scene = sample_scene_cuda();
 
-  pipeline(scene, setting, test_renderer);
+  pipeline(scene, cu_setting, test_cuda_renderer);
 
   free_scene(scene);
+
+  PipelineSetting omp_setting = {.width = width,
+                            .height = height,
+                            .ray_per_pixel = ray_count,
+                            .cuda_coercion_rate = coersion_rate,
+                            .debug = 1,
+                            .save = 1,
+                            .out_file = (char *)"test_omp.bmp"};
+
+  Scene *scene2 = sample_scene_cuda();
+
+  pipeline(scene2, omp_setting, test_openmp_renderer);
+
+  free_scene(scene2);
 }

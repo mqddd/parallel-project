@@ -36,19 +36,3 @@ char *save_frame(Frame *frame, char *file) {
   BMP_WriteFile(bmp, file);
   BMP_CHECK_ERROR(stdout, "Failed to save.");
 }
-
-// int main() {
-//   Frame * frame = create_frame(2000, 1440);
-
-//   for (int x = 0; x < frame->width; ++x) {
-//     for (int y = 0; y < frame->height; ++y) {
-//       int index = x + y * frame->width;
-//       frame->r[index] = 255 * (x + y) / (frame->width + frame->height);
-//       frame->g[index] = 50;
-//       frame->b[index] = 100;
-//     }
-//   }
-
-//   save_frame(frame, "out.bmp");
-//   free_frame(frame);
-// }
