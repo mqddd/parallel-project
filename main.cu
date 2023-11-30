@@ -53,7 +53,7 @@ __host__ __device__ __forceinline__ void pixel_ray(float x, float y, Vec3 *origi
 
 __host__ __device__ __forceinline__ void trace_ray(Vec3 *origin, Vec3 *direction,
                                           int ray_count, const Object *objects,
-                                          int object_count, Vec3 *ray_energy,
+                                          int object_count, Vec3 *ray_accumulated_light,
                                           unsigned *seed) {
   Vec3 ray_color = {.x = 1, .y = 1, .z = 1};
 
@@ -87,6 +87,10 @@ __host__ __device__ __forceinline__ void trace_ray(Vec3 *origin, Vec3 *direction
                                        1.0 - obj->material.specular_rate);
         normalize_v(&r_d);
 
+        ray_color.x *= obj->material.color.a;
+        ray_color.y *= obj->material.color.b;
+        ray_color.z *= obj->material.color.c;
+        
         emitted_light.x = obj->material.emission_color.a *
                           obj->material.emission_strength * ray_color.x;
         emitted_light.y = obj->material.emission_color.b *
@@ -94,11 +98,7 @@ __host__ __device__ __forceinline__ void trace_ray(Vec3 *origin, Vec3 *direction
         emitted_light.z = obj->material.emission_color.c *
                           obj->material.emission_strength * ray_color.z;
 
-        add_v(ray_energy, &emitted_light);
-
-        ray_color.x *= obj->material.color.a;
-        ray_color.y *= obj->material.color.b;
-        ray_color.z *= obj->material.color.c;
+        add_v(ray_accumulated_light, &emitted_light);
       } else {
         sky_emitted_light.x =
             (1) * sky_emitted_light_strength * ray_color.x;
@@ -107,15 +107,15 @@ __host__ __device__ __forceinline__ void trace_ray(Vec3 *origin, Vec3 *direction
         sky_emitted_light.z =
             (1) * sky_emitted_light_strength * ray_color.z;
 
-        add_v(ray_energy, &sky_emitted_light);
+        add_v(ray_accumulated_light, &sky_emitted_light);
         break;
       }
     }
   }
 
-  ray_energy->x /= ray_count;
-  ray_energy->y /= ray_count;
-  ray_energy->z /= ray_count;
+  ray_accumulated_light->x /= ray_count;
+  ray_accumulated_light->y /= ray_count;
+  ray_accumulated_light->z /= ray_count;
 }
 
 __global__ void computing_kernel(const Object *objects, const int count,
@@ -137,16 +137,16 @@ __global__ void computing_kernel(const Object *objects, const int count,
   Vec3 r_dir;
   pixel_ray(x, y, &r_origin, &r_dir);
 
-  Vec3 ray_energy = {.x = 0, .y = 0, .z = 0};
-  trace_ray(&r_origin, &r_dir, ray_coercion, objects, count, &ray_energy,
+  Vec3 ray_accumulated_light = {.x = 0, .y = 0, .z = 0};
+  trace_ray(&r_origin, &r_dir, ray_coercion, objects, count, &ray_accumulated_light,
             &seed);
 
-  r[index] = ray_energy.x * 255.0;
-  g[index] = ray_energy.y * 255.0;
-  b[index] = ray_energy.z * 255.0;
+  r[index] = ray_accumulated_light.x * 255.0;
+  g[index] = ray_accumulated_light.y * 255.0;
+  b[index] = ray_accumulated_light.z * 255.0;
 }
 
-__global__ void average_kernel(const unsigned short *r, const unsigned short *g,
+__global__ void refine_kernel(const unsigned short *r, const unsigned short *g,
                                const unsigned short *b, UCHAR *r_out,
                                UCHAR *g_out, UCHAR *b_out, int w, int h,
                                int rays) {
@@ -232,7 +232,7 @@ __host__ void cuda_renderer(Scene *scene, Frame *frame, PipelineSetting setting)
   // ----
   cudaStartTimer(start, stop);
 
-  average_kernel<<<bld, thd>>>(r, g, b, r_out, g_out, b_out, w, h,
+  refine_kernel<<<bld, thd>>>(r, g, b, r_out, g_out, b_out, w, h,
                                rays_thread_count);
   cudaCheckForErrorAndSync();
   cudaStopTimerAndRecord(start, stop, time);
