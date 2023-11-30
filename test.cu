@@ -36,7 +36,6 @@ inline void gpuAssert(cudaError_t code, const char *file, int line,
 #define DIAFRAGM 0.002f
 #define FOCAL 10
 #define RAY_BOUNCE_LIMIT 10
-#define R_COUNT 50
 
 __host__ __device__ __forceinline__ void pixel_ray(float x, float y, Vec3 *origin,
                                           Vec3 *direction) {
@@ -274,7 +273,7 @@ __host__ void test_openmp_renderer(Scene *scene, Frame *frame, PipelineSetting s
       pixel_ray(x, y, &r_origin, &r_dir);
 
       Vec3 ray_energy = {.x = 0, .y = 0, .z = 0};
-      trace_ray(&r_origin, &r_dir, R_COUNT, scene->objects, scene->count, &ray_energy, &seed);
+      trace_ray(&r_origin, &r_dir, setting.ray_per_pixel, scene->objects, scene->count, &ray_energy, &seed);
 
       float max_e = fmax(ray_energy.x, fmax(ray_energy.y, ray_energy.z));
       if (max_e > 1) {
