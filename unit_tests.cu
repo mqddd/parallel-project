@@ -5,7 +5,14 @@
 
 static char* test_add_v() 
 {
+    Vec3 a = {.x=-25, .y=0, .z=25};
+    Vec3 b = {.x=25, .y=25, .z=25};
+    int c = 25;
 
+    add_v(a, b);
+    if (a != {.x=0, y.25, z.50}) {
+        return "test failed!";
+    }
 }
 
 static char* test_add_v() 

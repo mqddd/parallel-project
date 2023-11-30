@@ -1,8 +1,9 @@
 #include "pipeline.h"
 #include <stdio.h>
 #include <sys/time.h>
+#include <string.h>
 
-void pipeline(Scene *scene, PipelineSetting setting, Renderer renderer) {
+void pipeline(Scene *scene, PipelineSetting setting, Renderer renderer, int render_type) {
   struct timeval start, stop;
   double time;
   gettimeofday(&start, NULL);
@@ -14,7 +15,11 @@ void pipeline(Scene *scene, PipelineSetting setting, Renderer renderer) {
     gettimeofday(&stop, NULL);
     time = (stop.tv_sec - start.tv_sec) * 1000 +
            (double)(stop.tv_usec - start.tv_usec) / 1000;
-    printf("Render took %.4f ms \n\n", time);
+    if (render_type == 1) {
+      printf("CUDA render took %.4f ms \n\n", time);
+    } else {
+      printf("OMP render took %.4f ms \n\n", time);
+    }
   }
 
   if (setting.save && setting.out_file) {

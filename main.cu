@@ -36,6 +36,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line,
 #define DIAFRAGM 0.002f
 #define FOCAL 10
 #define RAY_BOUNCE_LIMIT 10
+#define NUM_THREADS 16
 
 __host__ __device__ __forceinline__ void pixel_ray(float x, float y, Vec3 *origin,
                                           Vec3 *direction) {
@@ -257,7 +258,7 @@ __host__ void omp_renderer(Scene *scene, Frame *frame, PipelineSetting setting) 
   UCHAR *g_out = (UCHAR *) malloc(sizeof(UCHAR) * w * h);
   UCHAR *b_out = (UCHAR *) malloc(sizeof(UCHAR) * w * h);
   
-  #pragma omp parallel for num_threads(16)
+  #pragma omp parallel for num_threads(NUM_THREADS)
   for (int x_p = 0; x_p < w; x_p++)
   {
     for (int y_p = 0; y_p < h; y_p++)
@@ -329,7 +330,7 @@ int main(int argc, char *argv[]) {
                              .out_file = (char *)"test_cu.bmp"};
   Scene *scene = sample_scene_cuda();
 
-  pipeline(scene, cu_setting, cuda_renderer);
+  pipeline(scene, cu_setting, cuda_renderer, 1);
 
   free_scene(scene);
 
@@ -342,7 +343,7 @@ int main(int argc, char *argv[]) {
 
   Scene *scene2 = sample_scene_cuda();
 
-  pipeline(scene2, omp_setting, omp_renderer);
+  pipeline(scene2, omp_setting, omp_renderer, 0);
 
   free_scene(scene2);
 }

@@ -16,6 +16,6 @@ typedef struct PipelineSetting {
 
 typedef void (*Renderer)(Scene *, Frame *, PipelineSetting);
 
-void pipeline(Scene *scene, PipelineSetting setting, Renderer renderer);
+void pipeline(Scene *scene, PipelineSetting setting, Renderer renderer, int render_type);
 
 #endif
