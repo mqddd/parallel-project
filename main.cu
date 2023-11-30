@@ -117,7 +117,7 @@ __host__ __device__ __forceinline__ void trace_ray(Vec3 *origin, Vec3 *direction
   ray_energy->z /= ray_count;
 }
 
-__global__ void test_kernel(const Object *objects, const int count,
+__global__ void computing_kernel(const Object *objects, const int count,
                             unsigned short *r, unsigned short *g,
                             unsigned short *b, const int w, const int h,
                             const int rays, const int ray_coercion) {
@@ -181,7 +181,7 @@ __global__ void average_kernel(const unsigned short *r, const unsigned short *g,
   b_out[index] = (bp) > 255 ? 255 : (bp);
 }
 
-__host__ void test_cuda_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
+__host__ void cuda_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
   int w = frame->width;
   int h = frame->height;
   int rays_thread_count = setting.ray_per_pixel / setting.cuda_coercion_rate;
@@ -222,7 +222,7 @@ __host__ void test_cuda_renderer(Scene *scene, Frame *frame, PipelineSetting set
   cudaEvent_t start, stop;
   cudaStartTimer(start, stop);
 
-  test_kernel<<<bld, thd>>>(d_objects, scene->count, r, g, b, w, h,
+  computing_kernel<<<bld, thd>>>(d_objects, scene->count, r, g, b, w, h,
                             rays_thread_count, ray_coercion);
   cudaCheckForErrorAndSync();
   cudaStopTimerAndRecord(start, stop, time);
@@ -245,7 +245,7 @@ __host__ void test_cuda_renderer(Scene *scene, Frame *frame, PipelineSetting set
   cudaFree(b);
 }
 
-__host__ void test_openmp_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
+__host__ void omp_renderer(Scene *scene, Frame *frame, PipelineSetting setting) {
   int w = frame->width;
   int h = frame->height;
 
@@ -329,21 +329,20 @@ int main(int argc, char *argv[]) {
                              .out_file = (char *)"test_cu.bmp"};
   Scene *scene = sample_scene_cuda();
 
-  pipeline(scene, cu_setting, test_cuda_renderer);
+  pipeline(scene, cu_setting, cuda_renderer);
 
   free_scene(scene);
 
   PipelineSetting omp_setting = {.width = width,
                             .height = height,
                             .ray_per_pixel = ray_count,
-                            .cuda_coercion_rate = coersion_rate,
                             .debug = 1,
                             .save = 1,
                             .out_file = (char *)"test_omp.bmp"};
 
   Scene *scene2 = sample_scene_cuda();
 
-  pipeline(scene2, omp_setting, test_openmp_renderer);
+  pipeline(scene2, omp_setting, omp_renderer);
 
   free_scene(scene2);
 }
