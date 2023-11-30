@@ -1,6 +1,4 @@
 #include <cuda_runtime_api.h>
-// #include <curand.h>
-// #include <curand_kernel.h>
 #include "rt_utils.cu"
 #include <math.h>
 #include <stdbool.h>
@@ -49,7 +47,6 @@ __host__ __device__ __forceinline__ void pixel_ray(float x, float y, Vec3 *origi
   direction->x = x;
   direction->y = y;
   direction->z = FOCAL;
-  // divide_v(direction, len_v(direction));
   rotateDirection(direction, 7, 0, 0);
   normalize_v(direction);
 }

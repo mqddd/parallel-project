@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "test.h"
-// #include "cuda_vec.cu"
+#include "cuda_vec.cu"
 
 static char* test_add_v() 
 {
